@@ -20,7 +20,8 @@ def dl(driver):
 
     chromeOptions = webdriver.ChromeOptions()
     prefs = {"download.default_directory" : f"{os.path.dirname(os.path.abspath(__file__))}\\Downloads"}
-    chromeOptions.add_experimental_option("prefs",prefs)
+    chromeOptions.add_experimental_option("prefs", prefs)
+    chromeOptions.add_experimental_option("detach", True)
     nd = webdriver.Chrome(chrome_options=chromeOptions)
 
     nd.get(current)
@@ -111,7 +112,7 @@ for album in soup.find_all('li', {'class': 'music-grid-item square'}):
 
 chromeOptions = webdriver.ChromeOptions()
 prefs = {"download.default_directory" : f"{os.path.dirname(os.path.abspath(__file__))}\\Downloads"}
-chromeOptions.add_experimental_option("prefs",prefs)
+chromeOptions.add_experimental_option("prefs", prefs)
 driver = webdriver.Chrome(chrome_options=chromeOptions)
 
 for link in links:
@@ -130,5 +131,3 @@ for link in links:
         free(driver)
     else:
         buy(driver)
-
-driver.close()
