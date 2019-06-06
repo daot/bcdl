@@ -27,45 +27,49 @@ def dl(driver):
     nd.get(current)
 
     nd.execute_script('''(function () {
-        'use strict';
+            'use strict';
 
-        var format = "FLAC";
+            var format = "FLAC";
 
-        var selectedFormat = false;
+            var selectedFormat = false;
 
-        setTimeout(function(){
-            var interval = setInterval(function () {
-                if(!selectedFormat){
-                    document.getElementsByClassName('item-format button')[0].click();
-                    var spans = document.getElementsByTagName("span");
+            setTimeout(function(){
+                var interval = setInterval(function () {
+                    if(!selectedFormat){
+                        document.getElementsByClassName('item-format button')[0].click();
+                        var spans = document.getElementsByTagName("span");
 
-                    for (var i = 0; i < spans.length; i++) {
-                      if (spans[i].textContent == format) {
-                        spans[i].parentElement.click();
-                        selectedFormat = true;
-                        break;
-                      }
-                    }
-                }else{
-                    var errorText = document.getElementsByClassName("error-text")[0];
-                    if (errorText.offsetParent !== null) {
-                        location.reload();
-                    }
-                    try {
-                        var maintenanceLink = document.getElementsByTagName("a")[0];
-                        if (a.href.indexOf("bandcampstatus") > 0) {
+                        for (var i = 0; i < spans.length; i++) {
+                          if (spans[i].textContent == format) {
+                            spans[i].parentElement.click();
+                            selectedFormat = true;
+                            break;
+                          }
+                        }
+                    }else{
+                        var errorText = document.getElementsByClassName("error-text")[0];
+                        if (errorText.offsetParent !== null) {
                             location.reload();
                         }
-                    } catch (e) { }
-                    var titleLabel = document.getElementsByClassName('download-title')[0];
-                    if (titleLabel.children[0].href !== undefined && titleLabel.children[0].href.length > 0) {
-                        titleLabel.children[0].click();
-                        clearTimeout(interval);
+                        try {
+                            var maintenanceLink = document.getElementsByTagName("a")[0];
+                            if (a.href.indexOf("bandcampstatus") > 0) {
+                                location.reload();
+                            }
+                        } catch (e) { }
+                        var titleLabel = document.getElementsByClassName('download-title')[0];
+                        if (titleLabel.children[0].href !== undefined && titleLabel.children[0].href.length > 0) {
+                            titleLabel.children[0];
+                            clearTimeout(interval);
+                        }
                     }
-                }
+                }, 2000);
             }, 2000);
-        }, 2000);
-    })();''')
+        })();
+
+        var myLink = document.getElementsByClassName("item-button")
+        var arr = [].slice.call(myLink)
+        console.log(arr[arr.length - 1]['href'])''')
 
 def free(driver):
     driver.find_element_by_xpath('//*[@id="trackInfoInner"]/ul/li[1]/div[2]/h4/button').click()
@@ -105,6 +109,10 @@ data = requests.get(f"http://{name}.bandcamp.com/music")
 soup = BeautifulSoup(data.text, 'html.parser')
 
 links = []
+for album in soup.find_all('li', {'class': 'music-grid-item square first-four'}):
+    for link in album.find_all('a', href=True):
+        if link['href'].startswith('/'):
+            links.append(link['href'])
 for album in soup.find_all('li', {'class': 'music-grid-item square'}):
     for link in album.find_all('a', href=True):
         if link['href'].startswith('/'):
