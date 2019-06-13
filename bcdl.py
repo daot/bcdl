@@ -19,7 +19,7 @@ def dl(driver):
     current = driver.current_url
 
     chromeOptions = webdriver.ChromeOptions()
-    prefs = {"download.default_directory" : f"{os.path.dirname(os.path.abspath(__file__))}/Downloads"}
+    prefs = {"download.default_directory" : os.path.join(os.path.dirname(os.path.abspath(__file__)), "Downloads")}
     chromeOptions.add_experimental_option("prefs", prefs)
     chromeOptions.add_experimental_option("detach", True)
     nd = webdriver.Chrome(options=chromeOptions)
