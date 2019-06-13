@@ -19,57 +19,19 @@ def dl(driver):
     current = driver.current_url
 
     chromeOptions = webdriver.ChromeOptions()
-    prefs = {"download.default_directory" : f"{os.path.dirname(os.path.abspath(__file__))}\\Downloads"}
+    prefs = {"download.default_directory" : f"{os.path.dirname(os.path.abspath(__file__))}/Downloads"}
     chromeOptions.add_experimental_option("prefs", prefs)
     chromeOptions.add_experimental_option("detach", True)
-    nd = webdriver.Chrome(chrome_options=chromeOptions)
+    nd = webdriver.Chrome(options=chromeOptions)
 
     nd.get(current)
 
-    nd.execute_script('''(function () {
-            'use strict';
-
-            var format = "FLAC";
-
-            var selectedFormat = false;
-
-            setTimeout(function(){
-                var interval = setInterval(function () {
-                    if(!selectedFormat){
-                        document.getElementsByClassName('item-format button')[0].click();
-                        var spans = document.getElementsByTagName("span");
-
-                        for (var i = 0; i < spans.length; i++) {
-                          if (spans[i].textContent == format) {
-                            spans[i].parentElement.click();
-                            selectedFormat = true;
-                            break;
-                          }
-                        }
-                    }else{
-                        var errorText = document.getElementsByClassName("error-text")[0];
-                        if (errorText.offsetParent !== null) {
-                            location.reload();
-                        }
-                        try {
-                            var maintenanceLink = document.getElementsByTagName("a")[0];
-                            if (a.href.indexOf("bandcampstatus") > 0) {
-                                location.reload();
-                            }
-                        } catch (e) { }
-                        var titleLabel = document.getElementsByClassName('download-title')[0];
-                        if (titleLabel.children[0].href !== undefined && titleLabel.children[0].href.length > 0) {
-                            titleLabel.children[0];
-                            clearTimeout(interval);
-                        }
-                    }
-                }, 2000);
-            }, 2000);
-        })();
-
-        var myLink = document.getElementsByClassName("item-button")
-        var arr = [].slice.call(myLink)
-        console.log(arr[arr.length - 1]['href'])''')
+    nd.delete_all_cookies()
+    nd.add_cookie({'name': 'download_encoding', 'value': '401'})
+    nd.refresh()
+    while nd.find_element_by_css_selector("a.item-button").is_displayed() == False:
+        pass
+    nd.find_element_by_css_selector("a.item-button").click()
 
 def free(driver):
     driver.find_element_by_xpath('//*[@id="trackInfoInner"]/ul/li[1]/div[2]/h4/button').click()
@@ -118,10 +80,7 @@ for album in soup.find_all('li', {'class': 'music-grid-item square'}):
         if link['href'].startswith('/'):
             links.append(link['href'])
 
-chromeOptions = webdriver.ChromeOptions()
-prefs = {"download.default_directory" : f"{os.path.dirname(os.path.abspath(__file__))}\\Downloads"}
-chromeOptions.add_experimental_option("prefs", prefs)
-driver = webdriver.Chrome(chrome_options=chromeOptions)
+driver = webdriver.Chrome()
 
 for link in links:
     driver.get(f"http://{name}.bandcamp.com{link}")
