@@ -12,7 +12,6 @@ from selenium.webdriver.common.keys import Keys
 
 
 def dl(driver):
-    driver.get(driver.current_url)
     driver.delete_all_cookies()
     driver.add_cookie({'name': 'download_encoding', 'value': '401'})
     driver.refresh()
@@ -31,8 +30,7 @@ def free(driver):
         print(Fore.CYAN + "[Check Email]")
         return
     except NoSuchElementException:
-        pass
-    dl(driver)
+        dl(driver)
 
 
 def nyp(driver):
@@ -48,8 +46,7 @@ def nyp(driver):
             driver.find_element_by_id('fan_email_postalcode').send_keys(Keys.RETURN)
             print(Fore.CYAN + "[Check Email]")
         except NoSuchElementException:
-            pass
-    dl(driver)
+            dl(driver)
 
 
 def downloadCheck(name, links):
