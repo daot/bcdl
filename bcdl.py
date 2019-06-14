@@ -1,30 +1,17 @@
-import requests, os, time, sys
+import requests, os, time, sys, argparse
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
+from selenium.common.exceptions import NoSuchElementException
 from bs4 import BeautifulSoup
 
-try:
-    email = sys.argv[sys.argv.index("-e") + 1]
-except:
-    print("Please enter an email for sending links to using '-e'")
-    exit()
-
-try:
-    zip = sys.argv[sys.argv.index("-z") + 1]
-except:
-    print("Please enter a zip code using '-z'")
-    exit()
-
 def dl(driver):
-    current = driver.current_url
-
     chromeOptions = webdriver.ChromeOptions()
     prefs = {"download.default_directory" : os.path.join(os.path.dirname(os.path.abspath(__file__)), "Downloads")}
     chromeOptions.add_experimental_option("prefs", prefs)
     chromeOptions.add_experimental_option("detach", True)
     nd = webdriver.Chrome(options=chromeOptions)
 
-    nd.get(current)
+    nd.get(driver.current_url)
 
     nd.delete_all_cookies()
     nd.add_cookie({'name': 'download_encoding', 'value': '401'})
@@ -39,62 +26,77 @@ def free(driver):
         driver.find_element_by_id('fan_email_address').send_keys(email)
         driver.find_element_by_id('fan_email_postalcode').send_keys(zip)
         driver.find_element_by_id('fan_email_postalcode').send_keys(Keys.RETURN)
+        print("[Check Email]")
         return
-    except:
+    except NoSuchElementException:
         pass
     dl(driver)
 
-def buy(driver):
+def nyp(driver):
     driver.find_element_by_xpath('//*[@id="trackInfoInner"]/ul/li[1]/div[3]/h4[1]/button').click()
-    try:
-        if "(no minimum)" in driver.find_element_by_xpath('//*[@id="fan_email"]/div[1]/div[1]/div[1]/span/span[2]/span').text:
-            driver.find_element_by_id('userPrice').send_keys("0")
-            time.sleep(2)
-            if "Alternatively, continue with zero" in driver.find_element_by_class_name('payment-nag-continue').text:
-                driver.find_element_by_class_name('payment-nag-continue').click()
-                driver.find_element_by_id('userPrice').send_keys(Keys.RETURN)
-                try:
-                    driver.find_element_by_id('fan_email_address').send_keys(email)
-                    driver.find_element_by_id('fan_email_postalcode').send_keys(zip)
-                    driver.find_element_by_id('fan_email_postalcode').send_keys(Keys.RETURN)
-                    return
-                except:
-                    pass
-                dl(driver)
-    except:
-        pass
-
-if not os.path.isdir("Downloads"):
-    os.mkdir("Downloads")
-name = str(sys.argv[-1]).replace('https://', '').replace('http://', '').split('.bandcamp')[0]
-data = requests.get(f"http://{name}.bandcamp.com/music")
-soup = BeautifulSoup(data.text, 'html.parser')
-
-links = []
-for album in soup.find_all('li', {'class': 'music-grid-item square first-four'}):
-    for link in album.find_all('a', href=True):
-        if link['href'].startswith('/'):
-            links.append(link['href'])
-for album in soup.find_all('li', {'class': 'music-grid-item square'}):
-    for link in album.find_all('a', href=True):
-        if link['href'].startswith('/'):
-            links.append(link['href'])
-
-driver = webdriver.Chrome()
-
-for link in links:
-    driver.get(f"http://{name}.bandcamp.com{link}")
-    try:
-        driver.find_element_by_xpath('//*[@id="trackInfoInner"]/ul/li[1]/div[2]/h4/button')
-        f = True
-    except:
+    driver.find_element_by_id('userPrice').send_keys("0")
+    time.sleep(2)
+    if "Alternatively, continue with zero" in driver.find_element_by_class_name('payment-nag-continue').text:
+        driver.find_element_by_class_name('payment-nag-continue').click()
+        driver.find_element_by_id('userPrice').send_keys(Keys.RETURN)
         try:
-            driver.find_element_by_xpath('//*[@id="trackInfoInner"]/ul/li[1]/div[3]/h4[1]/button')
-            f = False
-        except:
-            continue
+            driver.find_element_by_id('fan_email_address').send_keys(email)
+            driver.find_element_by_id('fan_email_postalcode').send_keys(zip)
+            driver.find_element_by_id('fan_email_postalcode').send_keys(Keys.RETURN)
+            print("[Check Email]")
+        except NoSuchElementException:
+            pass
+    dl(driver)
 
-    if f:
-        free(driver)
-    else:
-        buy(driver)
+def downloadCheck(name, links):
+    driver = webdriver.Chrome()
+    for link in links:
+        page = requests.get(f"http://{name}.bandcamp.com{link}")
+        soup = BeautifulSoup(page.text, 'html.parser')
+        print(' '.join(soup.find('h2', {'class': 'trackTitle'}).text.split()), end=' - ')
+        try:
+            if "name your price" in ' '.join(soup.find('h4', {'class': 'ft compound-button main-button'}).text.split()):
+                print("NYP")
+                driver.get(f"http://{name}.bandcamp.com{link}")
+                nyp(driver)
+            elif "Free Download" in ' '.join(soup.find('h4', {'class': 'ft compound-button main-button'}).text.split()):
+                print("FREE")
+                driver.get(f"http://{name}.bandcamp.com{link}")
+                free(driver)
+            else:
+                print("PAID")
+        except AttributeError:
+            print("UNAVALABLE")
+
+def getLinks():
+    name = url.replace('https://', '').replace('http://', '').split('.bandcamp')[0]
+    data = requests.get(f"http://{name}.bandcamp.com/music")
+    soup = BeautifulSoup(data.text, 'html.parser')
+
+    links = []
+    for album in soup.find_all('li', {'class': 'music-grid-item square first-four'}):
+        for link in album.find_all('a', href=True):
+            if link['href'].startswith('/'):
+                links.append(link['href'])
+    for album in soup.find_all('li', {'class': 'music-grid-item square'}):
+        for link in album.find_all('a', href=True):
+            if link['href'].startswith('/'):
+                links.append(link['href'])
+
+    downloadCheck(name, links)
+
+if __name__ == '__main__':
+    if not os.path.isdir("Downloads"):
+        os.mkdir("Downloads")
+
+    parser = argparse.ArgumentParser(description='Download free albums from Bandcamp.')
+    parser.add_argument('email', type=str, help='email to send links too')
+    parser.add_argument('zip', type=int, help='zipcode')
+    parser.add_argument('url', type=str, help='url of artist page')
+
+    args = parser.parse_args()
+
+    email = args.email
+    zip = args.zip
+    url = args.url
+    getLinks()
