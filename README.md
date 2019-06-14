@@ -9,4 +9,4 @@ It also does not download the links sent to your email. I don't feel like making
 
 **To Run:**
 1. Install dependencies `BeautifulSoup4, Selenium`
-2. Run with `python bcdl.py -e [email] -z [zip code] [url]`
+2. Run with `python bcdl.py [email] [zip code] [url]`
