@@ -49,7 +49,7 @@ def nyp(driver):
             dl(driver)
 
 
-def downloadCheck(name, links):
+def downloadCheck(links):
     chromeOptions = webdriver.ChromeOptions()
     chromeOptions.add_argument("headless")
     chromeOptions.add_argument("log-level=2")
@@ -76,7 +76,6 @@ def downloadCheck(name, links):
 
 
 def getLinks():
-    name = url.replace('https://', '').replace('http://', '').split('.bandcamp')[0]
     data = requests.get(f"http://{name}.bandcamp.com/music")
     soup = BeautifulSoup(data.text, 'html.parser')
     links = []
@@ -88,21 +87,37 @@ def getLinks():
         for link in album.find_all('a', href=True):
             if link['href'].startswith('/'):
                 links.append(link['href'])
-    downloadCheck(name, links)
+    downloadCheck(links)
+
+
+def main():
+    if not os.path.isdir("Downloads"):
+        os.mkdir("Downloads")
+
+    if args.a:
+        getLinks()
+    elif "/album/" in url:
+        downloadCheck([f"/album{url.split('album')[1]}"])
+    elif "/track/" in url:
+        downloadCheck([f"/track{url.split('track')[1]}"])
+    else:
+        getLinks()
 
 
 if __name__ == '__main__':
     init(autoreset=True)
+
     parser = argparse.ArgumentParser(description='Download free albums from Bandcamp.')
     parser.add_argument('email', type=str, help='email to send links too')
     parser.add_argument('zip', type=int, help='zipcode')
     parser.add_argument('url', type=str, help='url of artist page')
+    parser.add_argument('-a', action='store_true', help='download all albums of artist, regardless of url')
     args = parser.parse_args()
+
     email = args.email
     zip = args.zip
     url = args.url
 
-    if not os.path.isdir("Downloads"):
-        os.mkdir("Downloads")
+    name = url.replace('https://', '').replace('http://', '').split('.bandcamp')[0]
 
-    getLinks()
+    main()
