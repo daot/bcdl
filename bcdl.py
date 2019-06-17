@@ -57,6 +57,9 @@ def downloadCheck(link):
     soup = BeautifulSoup(page.text, 'html.parser')
     print(' '.join(soup.find('h2', {'class': 'trackTitle'}).text.split()), end=' - ')
     file = ' '.join(soup.find('span', {'itemprop': 'byArtist'}).text.split()) + ' - ' + ' '.join(soup.find('h2', {'class': 'trackTitle'}).text.split()) + '.zip'
+    for ch in ['<', '>', ':', '"', '/', '\\', '|', '?', '*']:
+        if ch in file:
+            file = file.replace(ch, '')
     if not os.path.isfile(os.path.join("Downloads", file)):
         try:
             if "name your price" in ' '.join(soup.find('h4', {'class': 'ft compound-button main-button'}).text.split()):
