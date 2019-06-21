@@ -25,7 +25,7 @@ def dl(file):
 
 
 def free(file):
-    driver.find_element_by_xpath('//*[@id="trackInfoInner"]/ul/li[1]/div[2]/h4/button').click()
+    driver.find_element_by_css_selector("button.download-link.buy-link").click()
     try:
         driver.find_element_by_id('fan_email_address').send_keys(email)
         driver.find_element_by_id('fan_email_postalcode').send_keys("20500")
@@ -37,7 +37,7 @@ def free(file):
 
 
 def nyp(file):
-    driver.find_element_by_xpath('//*[@id="trackInfoInner"]/ul/li[1]/div[3]/h4[1]/button').click()
+    driver.find_element_by_css_selector("button.download-link.buy-link").click()
     driver.find_element_by_id('userPrice').send_keys("0")
     time.sleep(2)
     if "Alternatively, continue with zero" in driver.find_element_by_class_name('payment-nag-continue').text:
