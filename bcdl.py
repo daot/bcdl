@@ -53,7 +53,7 @@ def nyp(file):
 
 
 def downloadCheck(link):
-    page = requests.get(link)
+    page = requests.get('https://' + (link.replace('https://', '').replace('http://', '')))
     soup = BeautifulSoup(page.text, 'html.parser')
     print(' '.join(soup.find('h2', {'class': 'trackTitle'}).text.split()), end=' - ')
     file = ' '.join(soup.find('span', {'itemprop': 'byArtist'}).text.split()) + ' - ' + ' '.join(soup.find('h2', {'class': 'trackTitle'}).text.split()) + '.zip'
