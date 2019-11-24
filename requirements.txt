@@ -1,5 +1,3 @@
 requests
-wget
-bs4
-colorama
-selenium
+beautifulsoup4
+tqdm
