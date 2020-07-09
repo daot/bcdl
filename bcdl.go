@@ -235,7 +235,7 @@ func availAndDownload(releaseLink string) []string {
 		println("Getting links from User Profile")
 
 		for _, releaseBox := range releasePageHTML.FindAll("li", "class", "collection-item-container") {
-			if "https://bandcamp.com/"+config.UserPage == releaseLink {
+			if "https://bandcamp.com/"+config.UserName == releaseLink {
 				releaseTitle := strings.TrimSpace(releaseBox.Find("div", "class", "collection-item-title").Text())
 				releaseArtist := strings.TrimSpace(releaseBox.Find("div", "class", "collection-item-artist").Text())
 				color.New(color.FgBlue).Print(string("--- "))
@@ -286,7 +286,7 @@ func availAndDownload(releaseLink string) []string {
 		color.New(color.FgBlue).Print(string("--- "))
 		println(releaseTitle, "by", releaseArtist)
 
-		userProfileSoup, _ := soup.Get("https://bandcamp.com/" + config.UserPage)
+		userProfileSoup, _ := soup.Get("https://bandcamp.com/" + config.UserName)
 		userProfileHTML = soup.HTMLParse(userProfileSoup)
 		releaseID := regexp.MustCompile(`tralbum_param\s*:.*?value\s*:\s*(\d*)`).FindStringSubmatch(releasePageHTML.FullText())[1]
 		releaseBox := userProfileHTML.Find("li", "data-itemid", releaseID)
@@ -389,7 +389,7 @@ func printLogo() {
 // Config for login
 var config = struct {
 	Identity string
-	UserPage string
+	UserName string
 }{}
 
 var (
@@ -402,53 +402,52 @@ func main() {
 	printLogo()
 
 	if _, err := os.Stat("config.yaml"); os.IsNotExist(err) {
-		configExample := []byte("# Load bandcamp.com -> Inspect Element -> Application -> Cookies -> identity\nidentity: \n# Your profile page -> (userpage).bandcamp.com\nuserpage: ")
+		configExample := []byte("# Load bandcamp.com -> Inspect Element -> Application -> Cookies -> identity\nidentity: \n# Your profile name - bandcamp.com/(username)\nusername: ")
 		ioutil.WriteFile("config.yaml", configExample, 0644)
-		color.Red("### Please fill out config.yaml before running")
-		os.Exit(0)
 	}
 
 	configor.Load(&config, "config.yaml")
 
-	if config.Identity == "" || config.UserPage == "" {
-		color.Red("### Please fill out config.yaml before running")
-		os.Exit(0)
+	if config.UserName == "" {
+		config.UserName = "random"
 	}
 
 	soup.Cookie("identity", config.Identity)
 	soup.Header("User-Agent", "Mozilla/5.0 (Windows NT 6.2 rv:20.0) Gecko/20121202 Firefox/20.0")
 
 	var releaseLink string
-	if len(os.Args) == 1 {
-		reader := bufio.NewReader(os.Stdin)
-		print("Input URL: ")
-		releaseLink, _ = reader.ReadString('\n')
-	} else {
-		if strings.HasPrefix(os.Args[1], "-") {
-			switch os.Args[1] {
-			case "-b":
-				if _, err := os.Stat("download_links.txt"); os.IsNotExist(err) {
-					color.Blue("--- Created download_links.txt")
-					os.Create("download_links.txt")
+	for {
+		if len(os.Args) == 1 {
+			reader := bufio.NewReader(os.Stdin)
+			print("Input URL: ")
+			releaseLink, _ = reader.ReadString('\n')
+		} else {
+			if strings.HasPrefix(os.Args[1], "-") {
+				switch os.Args[1] {
+				case "-b":
+					if _, err := os.Stat("download_links.txt"); os.IsNotExist(err) {
+						color.Blue("--- Created download_links.txt")
+						os.Create("download_links.txt")
+						os.Exit(0)
+					}
+					data, err := scanLines("download_links.txt")
+					if err != nil {
+						fmt.Println("File reading error", err)
+						os.Exit(0)
+					}
+					for _, link := range data {
+						get(link)
+					}
+					os.Exit(0)
+				default:
+					color.New(color.FgRed).Print(string("### "))
+					println("bcdl [link]")
 					os.Exit(0)
 				}
-				data, err := scanLines("download_links.txt")
-				if err != nil {
-					fmt.Println("File reading error", err)
-					os.Exit(0)
-				}
-				for _, link := range data {
-					get(link)
-				}
-				os.Exit(0)
-			default:
-				color.New(color.FgRed).Print(string("### "))
-				println("bcdl [link]")
-				os.Exit(0)
 			}
+			releaseLink = os.Args[1]
 		}
-		releaseLink = os.Args[1]
-	}
 
-	get(releaseLink)
+		get(releaseLink)
+	}
 }
