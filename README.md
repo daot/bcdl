@@ -12,7 +12,7 @@ You can use the flag `-b` to batch download from `download_links.txt`
 **Syntax:** `bcdl.exe [link/-b]`
 
 **Quick Setup:**
-1. Download `bcdl.exe` from [the releases tab](https://github.com/toadsucks/bcdl/releases/latest)
+1. Download `bcdl.exe` from [the releases tab](https://github.com/daot/bcdl/releases/latest)
 2. Put the executable in the folder of your choice, the downloads will be saved in a subfolder named `Downloads`
 3. *OPTIONAL:* Fill out `config.yaml` with the information needed (instructions are provided in the file). This allows bcdl to download albums in your library.
 
