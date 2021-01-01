@@ -826,7 +826,7 @@ func main() {
 	userPageHTML = soup.HTMLParse(userPageSoup)
 
 	// Get CLI flags
-	batch := kingpin.Flag("batch", "Download From download_links.txt").Default("flac").Short('b').Bool()
+	batch := kingpin.Flag("batch", "Download From download_links.txt").Short('b').Bool()
 	dqFlag := kingpin.Flag("quality", "Quality of Download (mp3-v0, mp3-320, flac, aac-hi, vorbis, alac, wav, aiff-lossless)").Default("flac").Short('q').String()
 	ofFlag := kingpin.Flag("output", "Output Folder").Default("downloads").Short('o').String()
 	rlArg := kingpin.Arg("url", "URL to Download").String()
