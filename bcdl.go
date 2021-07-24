@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/cheggaaa/pb"
-	"github.com/deepsheth/soup" // this fork is able to do HTTP Posts
+	"github.com/anaskhan96/soup"
 	"github.com/fatih/color"
 	"github.com/jinzhu/configor"
 	"github.com/tidwall/gjson"
@@ -711,7 +711,7 @@ func availAndDownload(releaseLink string) {
 // Makes sure url is valid Bandcamp link
 func validateLink(link string) string {
 	link = strings.TrimSpace(link)
-	re := regexp.MustCompile(`((\w+\.)?bandcamp.com\/((\w+)(\/.*)?)?)`)
+	re := regexp.MustCompile(`(([\w-]+\.)?bandcamp.com\/((\w+)(\/.*)?)?)`)
 	if validLink := re.FindStringSubmatch(link); validLink != nil {
 		return "https://" + validLink[1]
 	}
