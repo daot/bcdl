@@ -24,7 +24,7 @@ You can use the flag `-b` to batch download from `download_links.txt`
 
 ```
 "github.com/cheggaaa/pb"
-"github.com/deepsheth/soup" // this fork is able to do HTTP Posts
+"github.com/anaskhan96/soup"
 "github.com/fatih/color"
 "github.com/jinzhu/configor"
 "github.com/tidwall/gjson"
