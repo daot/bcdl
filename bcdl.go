@@ -19,8 +19,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cheggaaa/pb"
 	"github.com/anaskhan96/soup"
+	"github.com/cheggaaa/pb"
 	"github.com/fatih/color"
 	"github.com/jinzhu/configor"
 	"github.com/tidwall/gjson"
@@ -327,7 +327,7 @@ func getRetryURL(link string) string {
 	color.New(color.FgCyan).Print(string(">>> "))
 	fmt.Println(fsig, releaseID, ts)
 
-	popplersPage, _ := soup.Get(fmt.Sprintf("https://popplers5.bandcamp.com/statdownload/%s?enc=flac&%s&%s&%s", releaseType, fsig, releaseID, ts))
+	popplersPage, _ := soup.Get(fmt.Sprintf("https://popplers5.bandcamp.com/statdownload/%s?enc=%s&%s&%s&%s", releaseType, downloadQuality, fsig, releaseID, ts))
 	jsonString := regexp.MustCompile(`{\".*\"}`).FindString(popplersPage)
 
 	color.New(color.FgGreen).Print(string("==> "))
