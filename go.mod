@@ -9,6 +9,6 @@ require (
 	github.com/cheggaaa/pb v1.0.29
 	github.com/fatih/color v1.12.0
 	github.com/jinzhu/configor v1.2.1
-	github.com/tidwall/gjson v1.8.1
+	github.com/tidwall/gjson v1.9.3
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 )
