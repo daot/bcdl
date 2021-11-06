@@ -29,14 +29,19 @@ jobs:
             curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
             dep ensure
         fi
+        
+    - name: Add WinRes
+      run: |
+        go install github.com/tc-hib/go-winres@latest
+        go-winres make
 
     - name: Build
-      run: go build -v .
+      run: go build -v -o bcdl.exe . 
 
     - name: Test
       run: go test -v .
     
-    - name: Automatic Releases
+    - name: Automatic Release
       uses: marvinpinto/action-automatic-releases@v1.2.1
       with:
         repo_token: "${{ secrets.GITHUB_TOKEN }}"
