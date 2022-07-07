@@ -204,7 +204,9 @@ retry:
 			}
 		}
 		if _, err := os.Stat(filePath); !os.IsNotExist(err) {
-			if filepath.Ext(filePath) != ".zip" {
+			if keepZip {
+				color.Red("### Exists")
+			} else if filepath.Ext(filePath) != ".zip" {
 				color.New(color.FgCyan).Print(string(">>> "))
 				fmt.Println("Moving")
 				os.MkdirAll(releaseFolder, 0600)
@@ -218,7 +220,7 @@ retry:
 				unzip(filePath, releaseFolder)
 				fmt.Println(" - Done")
 
-				err = os.Remove(filePath)
+				os.Remove(filePath)
 			}
 			return releaseFolder
 		}
@@ -256,7 +258,9 @@ retry:
 	}
 
 	out.Close()
-	if filepath.Ext(filePath) != ".zip" {
+	if keepZip {
+		return releaseFolder
+	} else if filepath.Ext(filePath) != ".zip" {
 		color.New(color.FgCyan).Print(string(">>> "))
 		fmt.Println("Moving")
 		os.MkdirAll(releaseFolder, 0600)
@@ -264,7 +268,7 @@ retry:
 		if err != nil {
 			log.Fatal(err)
 		}
-		err = os.Remove(filePath)
+		os.Remove(filePath)
 	} else {
 		color.New(color.FgCyan).Print(string(">>> "))
 		fmt.Print("Unzipping")
@@ -372,62 +376,11 @@ func getEmailLink(releaseLink string) string {
 		}
 	}
 	fmt.Println()
-	
+
 	// Get content of the email
 	emailData, _ := soup.Get("https://getnada.com/api/v1/messages/html/" + UID)
 	emailContentSoup := soup.HTMLParse(emailData)
 	return emailContentSoup.Find("a").Attrs()["href"]
-}
-
-func tryForIndividualTracks(releaseLink string) string {
-	color.New(color.FgCyan).Print(string(">>> "))
-	fmt.Println("Geting Information from Individual Tracks")
-
-	embed := getAttrJSON("data-embed")
-	albumArtist := gjson.Get(embed, "artist").String()
-	albumTitle := gjson.Get(embed, "album_title").String()
-	folderPath := albumArtist + " - " + albumTitle
-
-	u, err := url.Parse(releaseLink)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if releasePageHTML.Find("table", "id", "track_table").Pointer == nil {
-		color.Red("### Unable to get all tracks using this method")
-		return ""
-	}
-
-	dlInfo := make(map[int]string)
-	for i, linkbox := range releasePageHTML.Find("table", "id", "track_table").FindAll("div", "class", "title") {
-		rel, err := u.Parse(linkbox.Find("a").Attrs()["href"])
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		releasePageSoup, _ := soup.Get(rel.String())
-		releasePageHTML = soup.HTMLParse(releasePageSoup)
-
-		if checkReleaseAvailability(releaseLink) == 4 {
-			color.Red("### Unable to get all tracks using this method")
-			return ""
-		}
-
-		tralbum := getAttrJSON("data-tralbum")
-		freeDownloadPage := gjson.Get(tralbum, "freeDownloadPage").String()
-		if freeDownloadPage == "" {
-			color.Red("### Unable to get all tracks using this method")
-			return ""
-		}
-		downloadURL := getRetryURL(freeDownloadPage)
-		dlInfo[i+1] = downloadURL
-	}
-
-	for k, v := range dlInfo {
-		download(v, filepath.Join(outputFolder, folderPath), true, fmt.Sprintf("%02d. ", k))
-	}
-
-	return filepath.Join(outputFolder, folderPath)
 }
 
 func getAttrJSON(attr string) string {
@@ -442,12 +395,6 @@ func tryForFreeDownloadURL(releaseLink string) {
 	tralbum := getAttrJSON("data-tralbum")
 	freeDownloadPage := gjson.Get(tralbum, "freeDownloadPage").String()
 	if freeDownloadPage == "" {
-		releaseFolder = tryForIndividualTracks(releaseLink)
-		if releaseFolder != "" {
-			finalAdditives(releaseFolder, releaseLink)
-			return
-		}
-
 		releasePageSoup, _ := soup.Get(releaseLink)
 		releasePageHTML = soup.HTMLParse(releasePageSoup)
 
@@ -525,6 +472,7 @@ func artistPageLinkGen(releaseLink string) {
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	// Gets all links in the middle box
 	for _, boxLink := range releasePageHTML.Find("div", "class", "leftMiddleColumns").FindAll("a") {
 		rel, err := u.Parse(boxLink.Attrs()["href"])
@@ -759,15 +707,14 @@ var config = struct {
 
 // Common global variables
 var (
-	releasePageHTML        soup.Root
-	userPageHTML           soup.Root
-	selectDownloadPageHTML soup.Root
-	outputFolder           string
-	downloadQuality        string
-	collectionSummary      string
-	writeDescription       bool
-	writeReviews           bool
-	noBar                  bool
+	releasePageHTML   soup.Root
+	outputFolder      string
+	downloadQuality   string
+	collectionSummary string
+	writeDescription  bool
+	writeReviews      bool
+	noBar             bool
+	keepZip           bool
 )
 
 func main() {
@@ -797,12 +744,9 @@ func main() {
 	soup.Cookie("identity", config.Identity)
 	soup.Header("User-Agent", "Mozilla/5.0 (Windows NT 6.2 rv:20.0) Gecko/20121202 Firefox/20.0")
 
-	// Pre-load useful pages
-	userPageSoup, _ := soup.Get("https://bandcamp.com/" + config.UserName)
-	userPageHTML = soup.HTMLParse(userPageSoup)
-
 	// Get CLI flags
 	batch := kingpin.Flag("batch", "Download From download_links.txt").Short('b').Bool()
+	zFlag := kingpin.Flag("zipped", "Keep albums in .zip format (don't extract)").Short('z').Bool()
 	dqFlag := kingpin.Flag("quality", "Quality of Download (mp3-v0, mp3-320, flac, aac-hi, vorbis, alac, wav, aiff-lossless)").Default("flac").Short('q').String()
 	ofFlag := kingpin.Flag("output", "Output Folder").Default("downloads").Short('o').String()
 	rlArg := kingpin.Arg("url", "URL to Download").String()
@@ -818,8 +762,9 @@ func main() {
 	writeDescription = *wdFlag
 	writeReviews = *wrFlag
 	noBar = *nbFlag
+	keepZip = *zFlag
 
-	if *batch == true {
+	if *batch {
 		// Batch downloading
 		if _, err := os.Stat("download_links.txt"); os.IsNotExist(err) {
 			color.Blue("--- Created download_links.txt")
