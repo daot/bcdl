@@ -341,19 +341,15 @@ func getEmailLink(releaseLink string) string {
 	releaseID := gjson.Get(dataEmbed, "tralbum_param.value").String()
 	releaseType := regexp.MustCompile(`bandcamp.com\/?(track|album)\/`).FindStringSubmatch(releaseLink)[1]
 
-	params := url.Values{}
-	params.Add("agent", "Mozilla_foo_bar")
-	params.Add("f", "get_email_address")
-	params.Add("ip", "127.0.0.1")
-
-	// Generate temporary email address
-	genEmailAddress, _ := soup.Get("http://api.guerrillamail.com/ajax.php?" + params.Encode())
-	emailAddr := gjson.Get(genEmailAddress, "email_addr").String()
-	sidToken := gjson.Get(genEmailAddress, "sid_token").String()
+	// Set email and clear inbox (manually doing request since soup doesn't support DELETE requests)
+	emailAddr := "bcdl-" + config.UserName + "@getnada.com"
+	req, _ := http.NewRequest("DELETE", "https://getnada.com/api/v1/inboxes/"+emailAddr, nil)
+	Client := &http.Client{}
+	Client.Do(req)
 
 	baseURL, _ := url.Parse(releaseLink)
-	baseURL.Path = "email_download"
 
+	baseURL.Path = "email_download"
 	data := url.Values{}
 	data.Add("address", emailAddr)
 	data.Add("country", "US")
@@ -365,41 +361,21 @@ func getEmailLink(releaseLink string) string {
 	// Send request to get download link
 	soup.PostForm(baseURL.String(), data)
 
-	params.Set("f", "check_email")
-	params.Add("sid_token", sidToken)
-	params.Add("seq", "1")
-
 	// Wait until the email has been received. Checks every second.
-	idFound := false
-	var mailID string
-	for !idFound {
-		inboxData, _ := soup.Get("http://api.guerrillamail.com/ajax.php?" + params.Encode())
-		if jsonSearch := gjson.Get(inboxData, "list.0.mail_id").String(); jsonSearch != "" {
-			fmt.Println()
-			mailID = jsonSearch
-			idFound = true
-		} else {
-			for _, icon := range []string{"-", "\\", "|", "/"} {
-				color.New(color.FgCyan).Print("\r>>> WAITING " + icon)
-				time.Sleep(250 * time.Millisecond)
-			}
+	var UID string
+	for UID == "" {
+		inboxData, _ := soup.Get("https://getnada.com/api/v1/inboxes/" + emailAddr)
+		UID = gjson.Get(inboxData, "msgs.0.uid").String()
+		for _, icon := range []string{"-", "\\", "|", "/"} {
+			color.New(color.FgCyan).Print("\r>>> WAITING " + icon)
+			time.Sleep(250 * time.Millisecond)
 		}
 	}
-
+	fmt.Println()
+	
 	// Get content of the email
-	params.Set("f", "fetch_email")
-	params.Set("email_id", mailID)
-	params.Del("sec")
-
-	emailData, _ := soup.Get("http://api.guerrillamail.com/ajax.php?" + params.Encode())
-	emailContentSoup := soup.HTMLParse(gjson.Get(emailData, "mail_body").String())
-
-	// Forget the email account
-	params.Set("f", "forget_me")
-	params.Del("email_id")
-	params.Set("email_addr", emailAddr)
-	soup.Get("http://api.guerrillamail.com/ajax.php?" + params.Encode())
-
+	emailData, _ := soup.Get("https://getnada.com/api/v1/messages/html/" + UID)
+	emailContentSoup := soup.HTMLParse(emailData)
 	return emailContentSoup.Find("a").Attrs()["href"]
 }
 
