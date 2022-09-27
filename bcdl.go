@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math/rand"
 	"archive/zip"
 	"bufio"
 	"fmt"
