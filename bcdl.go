@@ -1,7 +1,6 @@
 package main
 
 import (
-	"math/rand"
 	"archive/zip"
 	"bufio"
 	"fmt"
@@ -347,7 +346,7 @@ func getEmailLink(releaseLink string) string {
 	releaseType := regexp.MustCompile(`bandcamp.com\/?(track|album)\/`).FindStringSubmatch(releaseLink)[1]
 
 	// Set email and clear inbox (manually doing request since soup doesn't support DELETE requests)
-	emailAddr := "bcdl-" + strconv.Itoa(rand.intn(10000))+ "@getnada.com"
+	emailAddr := "bcdl-" + strconv.Itoa(rand.Intn(10000))+ "@getnada.com"
 	req, _ := http.NewRequest("DELETE", "https://getnada.com/api/v1/inboxes/"+emailAddr, nil)
 	Client := &http.Client{}
 	Client.Do(req)
