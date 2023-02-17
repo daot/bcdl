@@ -384,8 +384,8 @@ func tryForFreeDownloadURL(releaseLink string) {
 
 func freePageDownload(releaseLink string) {
 	nameSection := releasePageHTML.Find("div", "id", "name-section")
-	releaseTitle := nameSection.Find("h2", "class", "trackTitle").Text()
-	releaseArtist := nameSection.Find("span").Find("a").Text()
+	releaseTitle := strings.TrimSpace(nameSection.Find("h2", "class", "trackTitle").Text())
+	releaseArtist := strings.TrimSpace(nameSection.Find("span").Find("a").Text())
 	printReleaseName(releaseTitle, releaseArtist)
 
 	overwrite = o
@@ -400,8 +400,8 @@ func freePageDownload(releaseLink string) {
 
 func purchasedPageDownload(releaseLink string) {
 	nameSection := releasePageHTML.Find("div", "id", "name-section")
-	releaseTitle := nameSection.Find("h2", "class", "trackTitle").Text()
-	releaseArtist := nameSection.Find("span").Find("a").Text()
+	releaseTitle := strings.TrimSpace(nameSection.Find("h2", "class", "trackTitle").Text())
+	releaseArtist := strings.TrimSpace(nameSection.Find("span").Find("a").Text())
 	printReleaseName(releaseTitle, releaseArtist)
 
 	overwrite = o
@@ -513,19 +513,23 @@ func printReleaseName(releaseTitle string, releaseArtist string) {
 }
 
 func checkIfOverwrite(releaseTitle string, releaseArtist string) bool {
-	if _, err := os.Stat(filepath.Join(outputFolder, fmt.Sprintf("%s - %s", releaseArtist, releaseTitle))); !os.IsNotExist(err) {
+	releasePath := filepath.Join(outputFolder, fmt.Sprintf("%s - %s", releaseArtist, releaseTitle))
+	_, err := os.Stat(releasePath)
+	releasePath2 := filepath.Join(outputFolder, fmt.Sprintf("%s - %s", releaseArtist, releaseTitle)+".zip")
+	_, err2 := os.Stat(releasePath2)
+	if !os.IsNotExist(err) || !os.IsNotExist(err2) {
 		var choice string
 		for strings.ToLower(choice) != "y" && strings.ToLower(choice) != "n" {
 			color.New(color.FgGreen).Print(string("==> "))
 			fmt.Print("Would you like to redownload this release? (y/n): ")
 			fmt.Scanln(&choice)
 
-			if choice == "y" {
-				return true
+			if choice == "n" {
+				return false
 			}
 		}
 	}
-	return false
+	return true
 }
 
 func organizeRedownloadURLS(jsonstring string) map[string]string {
