@@ -48,7 +48,7 @@ func getReviews(releaseFolder string, releaseLink string) {
 		writeToFile(filepath.Join(releaseFolder, "info.txt"), "")
 	}
 
-	f, err := os.OpenFile(filepath.Join(releaseFolder, "info.txt"), os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+	f, err := os.OpenFile(filepath.Join(releaseFolder, "info.txt"), os.O_RDWR|os.O_CREATE, 0755)
 	if err != nil {
 		panic(err)
 	}
@@ -174,9 +174,7 @@ func unzip(src, dest string) error {
 	return nil
 }
 
-func download(url string, releaseFolder string, ignoreExistingFolder bool, filenamePrefix string) string {
-	errored := false
-
+func download(url string, releaseFolder string, filenamePrefix string) string {
 retry:
 	resp, err := http.Get(url)
 	if err != nil {
@@ -186,47 +184,22 @@ retry:
 	defer resp.Body.Close()
 
 	_, params, _ := mime.ParseMediaType(resp.Header.Get("Content-Disposition"))
-	filePath := filepath.Join(outputFolder, filenamePrefix+params["filename"])
+	downloadPath := filepath.Join(outputFolder, filenamePrefix+params["filename"])
 
 	if releaseFolder == "" {
-		releaseFolder = strings.TrimSuffix(filePath, filepath.Ext(filePath))
+		releaseFolder = strings.TrimSuffix(downloadPath, filepath.Ext(downloadPath))
 	}
 
 	if _, err := os.Stat(outputFolder); os.IsNotExist(err) {
-		os.MkdirAll(outputFolder, 0700)
+		os.MkdirAll(outputFolder, 0755)
 	}
 
-	if !errored {
-		if !ignoreExistingFolder {
-			if _, err := os.Stat(releaseFolder); !os.IsNotExist(err) {
-				color.Red("### Exists")
-				return releaseFolder
-			}
-		}
-		if _, err := os.Stat(filePath); !os.IsNotExist(err) {
-			if keepZip {
-				color.Red("### Exists")
-			} else if filepath.Ext(filePath) != ".zip" {
-				color.New(color.FgCyan).Print(string(">>> "))
-				fmt.Println("Moving")
-				os.MkdirAll(releaseFolder, 0600)
-				err := os.Rename(filePath, filepath.Join(releaseFolder, filepath.Base(filePath)))
-				if err != nil {
-					log.Fatal(err)
-				}
-			} else {
-				color.New(color.FgCyan).Print(string(">>> "))
-				fmt.Print("Unzipping")
-				unzip(filePath, releaseFolder)
-				fmt.Println(" - Done")
-
-				os.Remove(filePath)
-			}
-			return releaseFolder
-		}
+	if overwrite {
+		os.RemoveAll(downloadPath)
+		os.RemoveAll(releaseFolder)
 	}
 
-	out, _ := os.Create(filePath)
+	out, _ := os.Create(downloadPath)
 	defer out.Close()
 
 	i, _ := strconv.Atoi(resp.Header.Get("Content-Length"))
@@ -237,7 +210,7 @@ retry:
 		fmt.Print("Downloading")
 		if _, err = io.Copy(out, resp.Body); err != nil {
 			color.Red("### Error Saving")
-			errored = true
+			overwrite = true
 			goto retry
 		}
 		fmt.Println(" - Done")
@@ -250,7 +223,7 @@ retry:
 
 		if _, err = io.Copy(out, reader); err != nil {
 			color.Red("### Error Saving")
-			errored = true
+			overwrite = true
 			bar.Finish()
 			goto retry
 		}
@@ -260,22 +233,22 @@ retry:
 	out.Close()
 	if keepZip {
 		return releaseFolder
-	} else if filepath.Ext(filePath) != ".zip" {
+	} else if filepath.Ext(downloadPath) != ".zip" {
 		color.New(color.FgCyan).Print(string(">>> "))
 		fmt.Println("Moving")
-		os.MkdirAll(releaseFolder, 0600)
-		err := os.Rename(filePath, filepath.Join(releaseFolder, filepath.Base(filePath)))
+		os.MkdirAll(releaseFolder, 0755)
+		err := os.Rename(downloadPath, filepath.Join(releaseFolder, filepath.Base(downloadPath)))
 		if err != nil {
 			log.Fatal(err)
 		}
-		os.Remove(filePath)
+		os.Remove(downloadPath)
 	} else {
 		color.New(color.FgCyan).Print(string(">>> "))
 		fmt.Print("Unzipping")
-		unzip(filePath, releaseFolder)
+		unzip(downloadPath, releaseFolder)
 		fmt.Println(" - Done")
 
-		err = os.Remove(filePath)
+		err = os.Remove(downloadPath)
 		if err != nil {
 			log.Panic(err)
 		}
@@ -343,10 +316,10 @@ func getRetryURL(link string) string {
 func getEmailLink(releaseLink string) string {
 	dataEmbed := getAttrJSON("data-embed")
 	releaseID := gjson.Get(dataEmbed, "tralbum_param.value").String()
-	releaseType := regexp.MustCompile(`bandcamp.com\/?(track|album)\/`).FindStringSubmatch(releaseLink)[1]
+	releaseType := gjson.Get(dataEmbed, "tralbum_param.name").String()
 
 	// Set email and clear inbox (manually doing request since soup doesn't support DELETE requests)
-	emailAddr := "bcdl-" + strconv.Itoa(rand.Intn(10000))+ "@getnada.com"
+	emailAddr := "bcdl-" + strconv.Itoa(rand.Intn(10000)) + "@getnada.com"
 	req, _ := http.NewRequest("DELETE", "https://getnada.com/api/v1/inboxes/"+emailAddr, nil)
 	Client := &http.Client{}
 	Client.Do(req)
@@ -400,19 +373,26 @@ func tryForFreeDownloadURL(releaseLink string) {
 
 		selectDownloadURL := getEmailLink(releaseLink)
 		downloadURL = getPopplersFromSelectDownloadPage(selectDownloadURL)
-		releaseFolder = download(downloadURL, "", false, "")
+		releaseFolder = download(downloadURL, "", "")
 	} else {
 		selectDownloadURL := freeDownloadPage
 		downloadURL = getRetryURL(selectDownloadURL)
-		releaseFolder = download(downloadURL, "", false, "")
+		releaseFolder = download(downloadURL, "", "")
 	}
 	finalAdditives(releaseFolder, releaseLink)
 }
 
 func freePageDownload(releaseLink string) {
 	nameSection := releasePageHTML.Find("div", "id", "name-section")
-	printReleaseName(nameSection.Find("h2", "class", "trackTitle").Text(),
-		nameSection.Find("span").Find("a").Text())
+	releaseTitle := nameSection.Find("h2", "class", "trackTitle").Text()
+	releaseArtist := nameSection.Find("span").Find("a").Text()
+	printReleaseName(releaseTitle, releaseArtist)
+
+	overwrite = o
+	if !o && !checkIfOverwrite(releaseTitle, releaseArtist) {
+		fmt.Println()
+		return
+	}
 
 	tryForFreeDownloadURL(releaseLink)
 	fmt.Println()
@@ -420,8 +400,15 @@ func freePageDownload(releaseLink string) {
 
 func purchasedPageDownload(releaseLink string) {
 	nameSection := releasePageHTML.Find("div", "id", "name-section")
-	printReleaseName(nameSection.Find("h2", "class", "trackTitle").Text(),
-		nameSection.Find("span").Find("a").Text())
+	releaseTitle := nameSection.Find("h2", "class", "trackTitle").Text()
+	releaseArtist := nameSection.Find("span").Find("a").Text()
+	printReleaseName(releaseTitle, releaseArtist)
+
+	overwrite = o
+	if !o && !checkIfOverwrite(releaseTitle, releaseArtist) {
+		fmt.Println()
+		return
+	}
 
 	tralbum := getAttrJSON("data-tralbum")
 	albumID := gjson.Get(tralbum, "id")
@@ -438,7 +425,7 @@ func purchasedPageDownload(releaseLink string) {
 	fmt.Println(downloadPageLink)
 
 	popplersLink := getPopplersFromSelectDownloadPage(downloadPageLink)
-	releaseFolder := download(popplersLink, "", false, "")
+	releaseFolder := download(popplersLink, "", "")
 	finalAdditives(releaseFolder, releaseLink)
 	fmt.Println()
 }
@@ -456,10 +443,9 @@ func removeDuplicateValues(stringSlice []string) []string {
 }
 
 func artistPageLinkGen(releaseLink string) {
-	// Strips trailing characters off URL
-	releaseLink = regexp.MustCompile(`.+bandcamp.com`).FindString(releaseLink)
-
-	releasePageSoup, _ := soup.Get(releaseLink + "/music")
+	u, _ := url.Parse(releaseLink)
+	u.Path = "/music"
+	releasePageSoup, _ := soup.Get(u.String())
 	releasePageHTML = soup.HTMLParse(releasePageSoup)
 
 	if scriptJSON := regexp.MustCompile(`application\/ld\+json["\']>\s+({.+?})\s+<`).FindStringSubmatch(html.UnescapeString(releasePageHTML.HTML())); scriptJSON != nil {
@@ -526,6 +512,22 @@ func printReleaseName(releaseTitle string, releaseArtist string) {
 	fmt.Println(removeWhiteSpace(releaseTitle), "by", removeWhiteSpace(releaseArtist))
 }
 
+func checkIfOverwrite(releaseTitle string, releaseArtist string) bool {
+	if _, err := os.Stat(filepath.Join(outputFolder, fmt.Sprintf("%s - %s", releaseArtist, releaseTitle))); !os.IsNotExist(err) {
+		var choice string
+		for strings.ToLower(choice) != "y" && strings.ToLower(choice) != "n" {
+			color.New(color.FgGreen).Print(string("==> "))
+			fmt.Print("Would you like to redownload this release? (y/n): ")
+			fmt.Scanln(&choice)
+
+			if choice == "y" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func organizeRedownloadURLS(jsonstring string) map[string]string {
 	redownloadJSON := gjson.Get(jsonstring, "redownload_urls")
 	redownloadMap := make(map[string]string)
@@ -569,7 +571,7 @@ func userPageLinkGen(releaseLink string) {
 				fmt.Println(redownloadLink)
 
 				popplersLink := getPopplersFromSelectDownloadPage(redownloadLink)
-				releaseFolder := download(popplersLink, "", false, "")
+				releaseFolder := download(popplersLink, "", "")
 				finalAdditives(releaseFolder, releaseLink)
 				fmt.Println()
 			}
@@ -588,11 +590,11 @@ func userPageLinkGen(releaseLink string) {
 // Finds out what type of release the link is
 func checkReleaseAvailability(link string) int {
 	// User page
-	if regexp.MustCompile(`^(https?:\/\/)?bandcamp.com\/.+$`).MatchString(link) {
+	if releasePageHTML.Find("meta", "property", "og:type").Attrs()["content"] == "profile" {
 		return 0
 	}
 	// Artist page
-	if regexp.MustCompile(`^(https?:\/\/)?.+\.bandcamp\.com\/?(\w+)?$`).MatchString(link) {
+	if releasePageHTML.Find("meta", "property", "og:type").Attrs()["content"] == "band" {
 		return 1
 	}
 	// Purchased
@@ -635,9 +637,11 @@ func availAndDownload(releaseLink string) {
 // Makes sure url is valid Bandcamp link
 func validateLink(link string) string {
 	link = strings.TrimSpace(link)
-	re := regexp.MustCompile(`(([\w-]+\.)?bandcamp.com\/((\w+)(\/.*)?)?)`)
-	if validLink := re.FindStringSubmatch(link); validLink != nil {
-		return "https://" + validLink[1]
+	releasePageSoup, _ := soup.Get(link)
+	releasePageHTML = soup.HTMLParse(releasePageSoup)
+	if releasePageHTML.Find("meta", "property", "twitter:site").Attrs()["content"] == "@bandcamp" {
+		u, _ := url.Parse(link)
+		return string(u.String())
 	}
 	return ""
 }
@@ -650,12 +654,9 @@ func get(releaseLink string) {
 	releaseLink = validateLink(releaseLink)
 	if releaseLink == "" {
 		color.Red("### Invalid Link\n\n")
-	} else {
-		releasePageSoup, _ := soup.Get(releaseLink)
-		releasePageHTML = soup.HTMLParse(releasePageSoup)
-
-		availAndDownload(releaseLink)
+		return
 	}
+	availAndDownload(releaseLink)
 }
 
 // Reads file and returns lines as array
@@ -715,6 +716,8 @@ var (
 	writeReviews      bool
 	noBar             bool
 	keepZip           bool
+	overwrite         bool
+	o                 bool
 )
 
 func main() {
@@ -745,24 +748,26 @@ func main() {
 	soup.Header("User-Agent", "Mozilla/5.0 (Windows NT 6.2 rv:20.0) Gecko/20121202 Firefox/20.0")
 
 	// Get CLI flags
+	rlArg := kingpin.Arg("url", "URL to Download").String()
 	batch := kingpin.Flag("batch", "Download From download_links.txt").Short('b').Bool()
 	zFlag := kingpin.Flag("zipped", "Keep albums in .zip format (don't extract)").Short('z').Bool()
 	dqFlag := kingpin.Flag("quality", "Quality of Download (mp3-v0, mp3-320, flac, aac-hi, vorbis, alac, wav, aiff-lossless)").Default("flac").Short('q').String()
 	ofFlag := kingpin.Flag("output", "Output Folder").Default("downloads").Short('o').String()
-	rlArg := kingpin.Arg("url", "URL to Download").String()
 	wdFlag := kingpin.Flag("description", "Download and write description to info.txt").Short('d').Bool()
 	wrFlag := kingpin.Flag("reviews", "Download and write reviews to info.txt").Short('r').Bool()
 	nbFlag := kingpin.Flag("nobar", "Turns off progress bar").Short('p').Bool()
+	ovrFlag := kingpin.Flag("overwrite", "Does not ask if you want to overwrite a download").Short('f').Bool()
 	kingpin.Parse()
 
 	// Assign flags to variables
+	releaseLink := *rlArg
+	keepZip = *zFlag
 	downloadQuality = *dqFlag
 	outputFolder = *ofFlag
-	releaseLink := *rlArg
 	writeDescription = *wdFlag
 	writeReviews = *wrFlag
 	noBar = *nbFlag
-	keepZip = *zFlag
+	o = *ovrFlag
 
 	if *batch {
 		// Batch downloading
