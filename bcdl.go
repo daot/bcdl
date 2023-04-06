@@ -617,6 +617,21 @@ func checkReleaseAvailability(link string) int {
 	return 4
 }
 
+// if link requires payment write it in "paid.txt" file
+func paidLink(link string) {
+	f, err := os.OpenFile("paid.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer f.Close()
+
+	if _, err = f.Write([]byte(link + "\n")); err != nil {
+		fmt.Println(err)
+		return
+	}
+}
+
 // Directs the link to appropriate downloader
 func availAndDownload(releaseLink string) {
 	releaseAvailability := checkReleaseAvailability(releaseLink)
@@ -634,6 +649,7 @@ func availAndDownload(releaseLink string) {
 	case 3:
 		freePageDownload(releaseLink)
 	default:
+		paidLink(releaseLink)
 		color.Red("### Paid\n\n")
 	}
 }
