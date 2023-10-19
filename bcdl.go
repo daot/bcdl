@@ -318,15 +318,19 @@ func getEmailLink(releaseLink string) string {
 	releaseID := gjson.Get(dataEmbed, "tralbum_param.value").String()
 	releaseType := gjson.Get(dataEmbed, "tralbum_param.name").String()
 
-	// Set email and clear inbox (manually doing request since soup doesn't support DELETE requests)
-	emailAddr := "bcdl-" + strconv.Itoa(rand.Intn(10000)) + "@getnada.com"
-	req, _ := http.NewRequest("DELETE", "https://getnada.com/api/v1/inboxes/"+emailAddr, nil)
-	Client := &http.Client{}
-	Client.Do(req)
+	// Generate temporary email address
+	params := url.Values{}
+	params.Add("agent", "Mozilla_foo_bar")
+	params.Add("f", "get_email_address")
+	params.Add("ip", "127.0.0.1")
+
+	genEmailAddress, _ := soup.Get("http://api.guerrillamail.com/ajax.php?" + params.Encode())
+	emailAddr := gjson.Get(genEmailAddress, "email_addr").String()
+	sidToken := gjson.Get(genEmailAddress, "sid_token").String()
 
 	baseURL, _ := url.Parse(releaseLink)
-
 	baseURL.Path = "email_download"
+
 	data := url.Values{}
 	data.Add("address", emailAddr)
 	data.Add("country", "US")
@@ -338,21 +342,39 @@ func getEmailLink(releaseLink string) string {
 	// Send request to get download link
 	soup.PostForm(baseURL.String(), data)
 
+	params.Set("f", "check_email")
+	params.Add("sid_token", sidToken)
+	params.Add("seq", "1")
+
 	// Wait until the email has been received. Checks every second.
-	var UID string
-	for UID == "" {
-		inboxData, _ := soup.Get("https://getnada.com/api/v1/inboxes/" + emailAddr)
-		UID = gjson.Get(inboxData, "msgs.0.uid").String()
-		for _, icon := range []string{"-", "\\", "|", "/"} {
-			color.New(color.FgCyan).Print("\r>>> WAITING " + icon)
-			time.Sleep(250 * time.Millisecond)
+	var mailID string
+	for mailID == "" {
+		inboxData, _ := soup.Get("http://api.guerrillamail.com/ajax.php?" + params.Encode())
+		if jsonSearch := gjson.Get(inboxData, "list.0.mail_id").String(); jsonSearch != "" {
+			fmt.Println()
+			mailID = jsonSearch
+		} else {
+			for _, icon := range []string{"-", "\\", "|", "/"} {
+				color.New(color.FgCyan).Print("\r>>> WAITING " + icon)
+				time.Sleep(250 * time.Millisecond)
+			}
 		}
 	}
-	fmt.Println()
 
 	// Get content of the email
-	emailData, _ := soup.Get("https://getnada.com/api/v1/messages/html/" + UID)
-	emailContentSoup := soup.HTMLParse(emailData)
+	params.Set("f", "fetch_email")
+	params.Set("email_id", mailID)
+	params.Del("sec")
+
+	emailData, _ := soup.Get("http://api.guerrillamail.com/ajax.php?" + params.Encode())
+	emailContentSoup := soup.HTMLParse(gjson.Get(emailData, "mail_body").String())
+
+	// Forget the email account
+	params.Set("f", "forget_me")
+	params.Del("email_id")
+	params.Set("email_addr", emailAddr)
+	soup.Get("http://api.guerrillamail.com/ajax.php?" + params.Encode())
+
 	return emailContentSoup.Find("a").Attrs()["href"]
 }
 
@@ -388,8 +410,22 @@ func freePageDownload(releaseLink string) {
 	releaseArtist := strings.TrimSpace(nameSection.Find("span").Find("a").Text())
 	printReleaseName(releaseTitle, releaseArtist)
 
+	releasePath := findReleaseInFolder(releaseTitle, releaseArtist, outputFolder)
+	if monitorFolder != "downloads" {
+		monitoredRelease := findReleaseInFolder(releaseTitle, releaseArtist, monitorFolder)
+		if monitoredRelease != "" {
+			color.New(color.FgGreen).Print(string("==> "))
+			fmt.Printf(`Found "%s" Moving to "%s"`, monitoredRelease, outputFolder)
+			fmt.Print("\n\n")
+			err := os.Rename(monitoredRelease, filepath.Join(outputFolder, filepath.Base(monitoredRelease)))
+			if err != nil {
+				panic(err)
+			}
+			return
+		}
+	}
 	overwrite = o
-	if !o && !checkIfOverwrite(releaseTitle, releaseArtist) {
+	if !o && !checkIfOverwrite(releasePath) {
 		fmt.Println()
 		return
 	}
@@ -404,8 +440,22 @@ func purchasedPageDownload(releaseLink string) {
 	releaseArtist := strings.TrimSpace(nameSection.Find("span").Find("a").Text())
 	printReleaseName(releaseTitle, releaseArtist)
 
+	releasePath := findReleaseInFolder(releaseTitle, releaseArtist, outputFolder)
+	if monitorFolder != "downloads" {
+		monitoredRelease := findReleaseInFolder(releaseTitle, releaseArtist, monitorFolder)
+		if monitoredRelease != "" {
+			color.New(color.FgGreen).Print(string("==> "))
+			fmt.Printf(`Found "%s" Moving to "%s"`, monitoredRelease, outputFolder)
+			fmt.Print("\n\n")
+			err := os.Rename(monitoredRelease, filepath.Join(outputFolder, filepath.Base(monitoredRelease)))
+			if err != nil {
+				panic(err)
+			}
+			return
+		}
+	}
 	overwrite = o
-	if !o && !checkIfOverwrite(releaseTitle, releaseArtist) {
+	if !o && !checkIfOverwrite(releasePath) {
 		fmt.Println()
 		return
 	}
@@ -512,11 +562,41 @@ func printReleaseName(releaseTitle string, releaseArtist string) {
 	fmt.Println(removeWhiteSpace(releaseTitle), "by", removeWhiteSpace(releaseArtist))
 }
 
-func checkIfOverwrite(releaseTitle string, releaseArtist string) bool {
-	releasePath := filepath.Join(outputFolder, fmt.Sprintf("%s - %s", releaseArtist, releaseTitle))
+func findReleaseInFolder(releaseTitle string, releaseArtist string, searchFolder string) string {
+	// Bandcamp downloads have the standard format of ArtistName - ReleaseTitle
+	folderPath := fmt.Sprintf("%s - %s", releaseArtist, releaseTitle)
+
+	// Get a list of all files and subdirectories in the specified folder
+	files, err := filepath.Glob(filepath.Join(searchFolder, "*"))
+	if err != nil {
+		return ""
+	}
+
+	// Iterate through the folders and check if the target filename exists
+	for _, file := range files {
+		base := filepath.Base(file)
+		if strings.TrimSuffix(base, filepath.Ext(base)) == folderPath {
+			// Found the folder, return its full path
+			return file
+		}
+	}
+
+	// If the folder is not found, check if a zip file with the same name exists
+	for _, file := range files {
+		base := filepath.Base(file)
+		if base == (folderPath + ".zip") {
+			// Found the file, return its full path
+			return file
+		}
+	}
+
+	// File not found in the folder
+	return ""
+}
+
+func checkIfOverwrite(releasePath string) bool {
 	_, err := os.Stat(releasePath)
-	releasePath2 := filepath.Join(outputFolder, fmt.Sprintf("%s - %s", releaseArtist, releaseTitle)+".zip")
-	_, err2 := os.Stat(releasePath2)
+	_, err2 := os.Stat(releasePath + ".zip")
 	if !os.IsNotExist(err) || !os.IsNotExist(err2) {
 		var choice string
 		for strings.ToLower(choice) != "y" && strings.ToLower(choice) != "n" {
@@ -730,6 +810,7 @@ var config = struct {
 var (
 	releasePageHTML   soup.Root
 	outputFolder      string
+	monitorFolder     string
 	downloadQuality   string
 	collectionSummary string
 	writeDescription  bool
@@ -773,6 +854,7 @@ func main() {
 	zFlag := kingpin.Flag("zipped", "Keep albums in .zip format (don't extract)").Short('z').Bool()
 	dqFlag := kingpin.Flag("quality", "Quality of Download (mp3-v0, mp3-320, flac, aac-hi, vorbis, alac, wav, aiff-lossless)").Default("flac").Short('q').String()
 	ofFlag := kingpin.Flag("output", "Output Folder").Default("downloads").Short('o').String()
+	monFlag := kingpin.Flag("monitor", "If existing release is found in this folder, it will be moved to the downloads folder").Default("downloads").Short('m').String()
 	wdFlag := kingpin.Flag("description", "Download and write description to info.txt").Short('d').Bool()
 	wrFlag := kingpin.Flag("reviews", "Download and write reviews to info.txt").Short('r').Bool()
 	nbFlag := kingpin.Flag("nobar", "Turns off progress bar").Short('p').Bool()
@@ -784,6 +866,7 @@ func main() {
 	keepZip = *zFlag
 	downloadQuality = *dqFlag
 	outputFolder = *ofFlag
+	monitorFolder = *monFlag
 	writeDescription = *wdFlag
 	writeReviews = *wrFlag
 	noBar = *nbFlag
