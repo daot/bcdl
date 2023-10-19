@@ -383,27 +383,6 @@ func getAttrJSON(attr string) string {
 	return r
 }
 
-func tryForFreeDownloadURL(releaseLink string) {
-	// Searching for direct link to free download page. If mmissing, the release may be behind an email wall
-	var downloadURL string
-	var releaseFolder string
-	tralbum := getAttrJSON("data-tralbum")
-	freeDownloadPage := gjson.Get(tralbum, "freeDownloadPage").String()
-	if freeDownloadPage == "" {
-		releasePageSoup, _ := soup.Get(releaseLink)
-		releasePageHTML = soup.HTMLParse(releasePageSoup)
-
-		selectDownloadURL := getEmailLink(releaseLink)
-		downloadURL = getPopplersFromSelectDownloadPage(selectDownloadURL)
-		releaseFolder = download(downloadURL, "", "")
-	} else {
-		selectDownloadURL := freeDownloadPage
-		downloadURL = getRetryURL(selectDownloadURL)
-		releaseFolder = download(downloadURL, "", "")
-	}
-	finalAdditives(releaseFolder, releaseLink)
-}
-
 func freePageDownload(releaseLink string) {
 	nameSection := releasePageHTML.Find("div", "id", "name-section")
 	releaseTitle := strings.TrimSpace(nameSection.Find("h2", "class", "trackTitle").Text())
@@ -424,13 +403,35 @@ func freePageDownload(releaseLink string) {
 			return
 		}
 	}
+	if downloadQuality == "none" {
+		fmt.Print("\n")
+		return
+	}
 	overwrite = o
 	if !o && !checkIfOverwrite(releasePath) {
 		fmt.Println()
 		return
 	}
 
-	tryForFreeDownloadURL(releaseLink)
+	// Searching for direct link to free download page. If mmissing, the release may be behind an email wall
+	var downloadURL string
+	var releaseFolder string
+	tralbum := getAttrJSON("data-tralbum")
+	freeDownloadPage := gjson.Get(tralbum, "freeDownloadPage").String()
+	if freeDownloadPage == "" {
+		releasePageSoup, _ := soup.Get(releaseLink)
+		releasePageHTML = soup.HTMLParse(releasePageSoup)
+
+		selectDownloadURL := getEmailLink(releaseLink)
+		downloadURL = getPopplersFromSelectDownloadPage(selectDownloadURL)
+		releaseFolder = download(downloadURL, "", "")
+	} else {
+		selectDownloadURL := freeDownloadPage
+		downloadURL = getRetryURL(selectDownloadURL)
+		releaseFolder = download(downloadURL, "", "")
+	}
+
+	finalAdditives(releaseFolder, releaseLink)
 	fmt.Println()
 }
 
@@ -453,6 +454,9 @@ func purchasedPageDownload(releaseLink string) {
 			}
 			return
 		}
+	}
+	if downloadQuality == "none" {
+		return
 	}
 	overwrite = o
 	if !o && !checkIfOverwrite(releasePath) {
