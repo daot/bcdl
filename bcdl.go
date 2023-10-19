@@ -856,7 +856,7 @@ func main() {
 	rlArg := kingpin.Arg("url", "URL to Download").String()
 	batch := kingpin.Flag("batch", "Download From download_links.txt").Short('b').Bool()
 	zFlag := kingpin.Flag("zipped", "Keep albums in .zip format (don't extract)").Short('z').Bool()
-	dqFlag := kingpin.Flag("quality", "Quality of Download (mp3-v0, mp3-320, flac, aac-hi, vorbis, alac, wav, aiff-lossless)").Default("flac").Short('q').String()
+	dqFlag := kingpin.Flag("quality", "Quality of Download (mp3-v0, mp3-320, flac, aac-hi, vorbis, alac, wav, aiff-lossless) or 'none' to skip downloading entirely").Default("flac").Short('q').String()
 	ofFlag := kingpin.Flag("output", "Output Folder").Default("downloads").Short('o').String()
 	monFlag := kingpin.Flag("monitor", "If existing release is found in this folder, it will be moved to the downloads folder").Default("downloads").Short('m').String()
 	wdFlag := kingpin.Flag("description", "Download and write description to info.txt").Short('d').Bool()
