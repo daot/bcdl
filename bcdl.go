@@ -677,12 +677,16 @@ func userPageLinkGen(releaseLink string) {
 
 // Finds out what type of release the link is
 func checkReleaseAvailability(link string) int {
+	releaseType := releasePageHTML.Find("meta", "property", "og:type")
+	if releaseType.Error != nil {
+		return 4
+	}
 	// User page
-	if releasePageHTML.Find("meta", "property", "og:type").Attrs()["content"] == "profile" {
+	if releaseType.Attrs()["content"] == "profile" {
 		return 0
 	}
 	// Artist page
-	if releasePageHTML.Find("meta", "property", "og:type").Attrs()["content"] == "band" {
+	if releaseType.Attrs()["content"] == "band" {
 		return 1
 	}
 	// Purchased
@@ -698,7 +702,7 @@ func checkReleaseAvailability(link string) int {
 			return 3
 		}
 	}
-	return 4
+	return 5
 }
 
 // if link requires payment write it in "paid.txt" file
@@ -732,22 +736,12 @@ func availAndDownload(releaseLink string) {
 		purchasedPageDownload(releaseLink)
 	case 3:
 		freePageDownload(releaseLink)
+	case 4:
+		color.Red("### Invalid Link\n\n")
 	default:
 		paidLink(releaseLink)
 		color.Red("### Paid\n\n")
 	}
-}
-
-// Makes sure url is valid Bandcamp link
-func validateLink(link string) string {
-	link = strings.TrimSpace(link)
-	releasePageSoup, _ := soup.Get(link)
-	releasePageHTML = soup.HTMLParse(releasePageSoup)
-	if releasePageHTML.Find("meta", "property", "twitter:site").Attrs()["content"] == "@bandcamp" {
-		u, _ := url.Parse(link)
-		return string(u.String())
-	}
-	return ""
 }
 
 // Validate link, get link page, continues, returns downloaded file path
@@ -755,7 +749,12 @@ func get(releaseLink string) {
 	color.New(color.FgGreen).Print(string("==> "))
 	fmt.Println(releaseLink)
 
-	releaseLink = validateLink(releaseLink)
+	releaseLink = strings.TrimSpace(releaseLink)
+	u, _ := url.Parse(releaseLink)
+	releaseLink = string(u.String())
+	releasePageSoup, _ := soup.Get(releaseLink)
+	releasePageHTML = soup.HTMLParse(releasePageSoup)
+
 	if releaseLink == "" {
 		color.Red("### Invalid Link\n\n")
 		return
