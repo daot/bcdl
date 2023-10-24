@@ -19,12 +19,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alecthomas/kingpin/v2"
 	"github.com/anaskhan96/soup"
 	"github.com/cheggaaa/pb"
 	"github.com/fatih/color"
 	"github.com/jinzhu/configor"
 	"github.com/tidwall/gjson"
-	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 func getReviews(releaseFolder string, releaseLink string) {
