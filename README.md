@@ -23,12 +23,12 @@ You can use the flag `-b` to batch download from `download_links.txt`
 1. Install go dependencies
 
 ```
-"github.com/cheggaaa/pb"
+"github.com/alecthomas/kingpin/v2"
 "github.com/anaskhan96/soup"
+"github.com/cheggaaa/pb"
 "github.com/fatih/color"
 "github.com/jinzhu/configor"
 "github.com/tidwall/gjson"
-"gopkg.in/alecthomas/kingpin.v2"
 ```
 
 2. `go build bcdl.go`
