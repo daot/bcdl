@@ -184,6 +184,10 @@ retry:
 	defer resp.Body.Close()
 
 	_, params, _ := mime.ParseMediaType(resp.Header.Get("Content-Disposition"))
+	if params == nil {
+		color.Red("### Artist out of Free Downloads")
+		return ""
+	}
 	downloadPath := filepath.Join(outputFolder, filenamePrefix+params["filename"])
 
 	if releaseFolder == "" {
