@@ -25,24 +25,14 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-// https://golangcode.com/writing-to-file/
-func writeToFile(filename string, data string) error {
-	file, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	_, err = io.WriteString(file, data)
-	if err != nil {
-		return err
-	}
-	return file.Sync()
-}
-
 func getDescription(releaseFolder string) {
 	description := releasePageHTML.Find("meta", "name", "description").Attrs()["content"]
-	writeToFile(filepath.Join(releaseFolder, "info.txt"), strings.TrimSpace(html.UnescapeString(description)))
+
+	d1 := []byte(strings.TrimSpace(html.UnescapeString(description)))
+	err := os.WriteFile(filepath.Join(releaseFolder, "info.txt"), d1, 0644)
+	if err != nil {
+		log.Fatal("Error writing info.txt file", err)
+	}
 }
 
 func finalAdditives(releaseFolder string, releaseLink string) {
