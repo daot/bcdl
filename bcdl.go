@@ -715,9 +715,6 @@ var (
 )
 
 func main() {
-	// Print logo. wow.
-	printLogo()
-
 	// Read config json
 	_, err := os.Stat("config.json")
 	if err != nil {
@@ -751,6 +748,7 @@ func main() {
 	wdFlag := kingpin.Flag("description", "Download and write description to info.txt").Short('d').Bool()
 	nbFlag := kingpin.Flag("nobar", "Turns off progress bar").Short('p').Bool()
 	ovrFlag := kingpin.Flag("overwrite", "Does not ask if you want to overwrite a download").Short('f').Bool()
+	logoFlag := kingpin.Flag("nologo", "Disables logo").Short('n').Bool()
 	kingpin.Parse()
 
 	// Assign flags to variables
@@ -762,6 +760,11 @@ func main() {
 	writeDescription = *wdFlag
 	noBar = *nbFlag
 	o = *ovrFlag
+	logo := *logoFlag
+
+	if !logo {
+		printLogo()
+	}
 
 	if *batch != "" {
 		content, err := os.ReadFile(*batch)
@@ -773,7 +776,7 @@ func main() {
 			get(lines[i])
 		}
 	} else {
-		if releaseLinks[0] == "" {
+		if releaseLinks == nil {
 			color.Red("### Please enter a URL")
 			os.Exit(1)
 		}
