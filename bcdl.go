@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/zip"
+	"encoding/json"
 	"fmt"
 	"html"
 	"io"
@@ -21,7 +22,6 @@ import (
 	"github.com/anaskhan96/soup"
 	"github.com/cheggaaa/pb"
 	"github.com/fatih/color"
-	"github.com/jinzhu/configor"
 	"github.com/tidwall/gjson"
 )
 
@@ -696,8 +696,8 @@ func printLogo() {
 
 // Config for login
 var config = struct {
-	Identity string
-	UserName string
+	Identity string `json:"identity"`
+	UserName string `json:"username"`
 }{}
 
 // Common global variables
@@ -718,8 +718,15 @@ func main() {
 	// Print logo. wow.
 	printLogo()
 
-	// Load config file data
-	configor.Load(&config, "config.yaml")
+	// Read config json
+	content, err := os.ReadFile("config.json")
+	if err != nil {
+		log.Fatal("File reading error", err)
+	}
+	err = json.Unmarshal(content, &config)
+	if err != nil {
+		log.Fatal("Error reading config", err)
+	}
 
 	// Generate placeholder username if config username is blank
 	if config.UserName == "" {
