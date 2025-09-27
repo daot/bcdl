@@ -586,7 +586,7 @@ func userPageLinkGen(releaseLink string) {
 }
 
 // Finds out what type of release the link is
-func checkReleaseAvailability(link string) int {
+func checkReleaseAvailability() int {
 	releaseType := releasePageHTML.Find("meta", "property", "og:type")
 	if releaseType.Error != nil {
 		return 4
@@ -632,7 +632,7 @@ func paidLink(link string) {
 
 // Directs the link to appropriate downloader
 func availAndDownload(releaseLink string) {
-	releaseAvailability := checkReleaseAvailability(releaseLink)
+	releaseAvailability := checkReleaseAvailability()
 	switch releaseAvailability {
 	case 0:
 		color.New(color.FgCyan).Print(string(">>> "))
