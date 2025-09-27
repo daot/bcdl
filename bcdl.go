@@ -2,11 +2,9 @@ package main
 
 import (
 	"archive/zip"
-	"bufio"
 	"fmt"
 	"html"
 	"io"
-	"io/ioutil"
 	"log"
 	"math/rand"
 	"mime"
@@ -766,25 +764,6 @@ func get(releaseLink string) {
 	availAndDownload(releaseLink)
 }
 
-// Reads file and returns lines as array
-func scanLines(path string) ([]string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	scanner.Split(bufio.ScanLines)
-
-	var lines []string
-	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
-	}
-
-	return lines, nil
-}
-
 // Prints logo at startup
 func printLogo() {
 	logo := `
@@ -839,7 +818,7 @@ func main() {
 				"identity: \n" +
 				"# Your profile name - bandcamp.com/(username)\n" +
 				"username: ")
-		ioutil.WriteFile("config.yaml", configExample, 0644)
+		os.WriteFile("config.yaml", configExample, 0644)
 	}
 
 	// Load config file data
@@ -847,7 +826,6 @@ func main() {
 
 	// Generate placeholder username if config username is blank
 	if config.UserName == "" {
-		rand.Seed(time.Now().UnixNano())
 		config.UserName = fmt.Sprint(rand.Int())
 	}
 
@@ -857,7 +835,7 @@ func main() {
 
 	// Get CLI flags
 	rlArg := kingpin.Arg("url", "URL to Download").String()
-	batch := kingpin.Flag("batch", "Download From download_links.txt").Short('b').Bool()
+	batch := kingpin.Flag("batch", "Download From [file]").Short('b').String()
 	zFlag := kingpin.Flag("zipped", "Keep albums in .zip format (don't extract)").Short('z').Bool()
 	dqFlag := kingpin.Flag("quality", "Quality of Download (mp3-v0, mp3-320, flac, aac-hi, vorbis, alac, wav, aiff-lossless) or 'none' to skip downloading entirely").Default("flac").Short('q').String()
 	ofFlag := kingpin.Flag("output", "Output Folder").Default("downloads").Short('o').String()
@@ -879,22 +857,14 @@ func main() {
 	noBar = *nbFlag
 	o = *ovrFlag
 
-	if *batch {
-		// Batch downloading
-		if _, err := os.Stat("download_links.txt"); os.IsNotExist(err) {
-			color.Blue("--- Created download_links.txt")
-			os.Create("download_links.txt")
-			os.Exit(0)
-		}
-
-		data, err := scanLines("download_links.txt")
+	if *batch != "" {
+		content, err := os.ReadFile(*batch)
 		if err != nil {
-			fmt.Println("File reading error", err)
-			os.Exit(0)
+			log.Fatal("File reading error", err)
 		}
-
-		for i := 0; i < len(data); i++ {
-			get(data[i])
+		lines := strings.Split(string(content), "\n")
+		for i := 0; i < len(lines); i++ {
+			get(lines[i])
 		}
 	} else {
 		if releaseLink != "" {
