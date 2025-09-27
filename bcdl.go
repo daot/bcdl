@@ -25,52 +25,6 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-func getReviews(releaseFolder string, releaseLink string) {
-	parsedURL, _ := url.Parse(releaseLink)
-	dataEmbed := getAttrJSON("data-embed")
-
-	albumID := gjson.Get(dataEmbed, "tralbum_param.value").String()
-	releaseType := gjson.Get(dataEmbed, "tralbum_param.name").String()
-
-	// Get all reviews from release
-	jsonstring, err := soup.Post(fmt.Sprintf(`https://%s/api/tralbumcollectors/2/reviews`, parsedURL.Host),
-		"application/x-www-form-urlencoded",
-		fmt.Sprintf(`{"tralbum_type":"%s","tralbum_id":%s,"token":"1:9999999999:9999999999:1:1:0","count":9999999999,"exclude_fan_ids":[]}`, string(releaseType[0]), albumID))
-	if err != nil {
-		panic(err)
-	}
-
-	prefix := "\n\n"
-	if !writeDescription {
-		prefix = ""
-		writeToFile(filepath.Join(releaseFolder, "info.txt"), "")
-	}
-
-	f, err := os.OpenFile(filepath.Join(releaseFolder, "info.txt"), os.O_RDWR|os.O_CREATE, 0755)
-	if err != nil {
-		panic(err)
-	}
-
-	defer f.Close()
-
-	// If there are reviews, write them
-	if gjson.Get(jsonstring, "results.#").Int() != 0 {
-		if _, err = f.WriteString(prefix + "# Reviews:"); err != nil {
-			panic(err)
-		}
-
-		for _, k := range gjson.Get(jsonstring, "results").Array() {
-			cleaned := removeWhiteSpace(strings.TrimSpace(html.UnescapeString(k.String())))
-			review := "\n\n" + gjson.Get(cleaned, "name").String() +
-				" (" + gjson.Get(cleaned, "username").String() + "): " +
-				gjson.Get(cleaned, "why").String()
-			if _, err = f.WriteString(review); err != nil {
-				panic(err)
-			}
-		}
-	}
-}
-
 // https://golangcode.com/writing-to-file/
 func writeToFile(filename string, data string) error {
 	file, err := os.Create(filename)
@@ -99,11 +53,6 @@ func finalAdditives(releaseFolder string, releaseLink string) {
 		color.New(color.FgCyan).Print(string(">>> "))
 		fmt.Println("Writing Description")
 		getDescription(releaseFolder)
-	}
-	if writeReviews {
-		color.New(color.FgCyan).Print(string(">>> "))
-		fmt.Println("Writing Reviews")
-		getReviews(releaseFolder, releaseLink)
 	}
 }
 
