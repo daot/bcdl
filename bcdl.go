@@ -334,7 +334,7 @@ func getAttrJSON(attr string) string {
 	return r
 }
 
-func freePageDownload(releaseLink string) {
+func downloadRelease(releaseLink string, isPurchased bool) {
 	nameSection := releasePageHTML.Find("div", "id", "name-section")
 	releaseTitle := strings.TrimSpace(nameSection.Find("h2", "class", "trackTitle").Text())
 	releaseArtist := strings.TrimSpace(nameSection.Find("span").Find("a").Text())
@@ -364,73 +364,42 @@ func freePageDownload(releaseLink string) {
 		return
 	}
 
-	// Searching for direct link to free download page. If mmissing, the release may be behind an email wall
 	var downloadURL string
 	var releaseFolder string
 	tralbum := getAttrJSON("data-tralbum")
-	freeDownloadPage := gjson.Get(tralbum, "freeDownloadPage").String()
-	if freeDownloadPage == "" {
-		releasePageSoup, _ := soup.Get(releaseLink)
-		releasePageHTML = soup.HTMLParse(releasePageSoup)
+	if isPurchased {
 
-		selectDownloadURL := getEmailLink(releaseLink)
-		downloadURL = getPopplersFromSelectDownloadPage(selectDownloadURL)
+		albumID := gjson.Get(tralbum, "id")
+
+		if collectionSummary == "" {
+			collectionSummary = getCollectionSummary(true)
+		}
+		redownloadMap := organizeRedownloadURLS(collectionSummary)
+
+		salesID := gjson.Get(collectionSummary, fmt.Sprintf(`items.#(item_id=="%s").sale_item_id`, albumID))
+		downloadPageLink := redownloadMap[salesID.String()]
+
+		color.New(color.FgGreen).Print(string("==> "))
+		fmt.Println(downloadPageLink)
+
+		downloadURL = getPopplersFromSelectDownloadPage(downloadPageLink)
 		releaseFolder = download(downloadURL, "", "")
 	} else {
-		selectDownloadURL := freeDownloadPage
-		downloadURL = getRetryURL(selectDownloadURL)
-		releaseFolder = download(downloadURL, "", "")
-	}
-
-	finalAdditives(releaseFolder, releaseLink)
-	fmt.Println()
-}
-
-func purchasedPageDownload(releaseLink string) {
-	nameSection := releasePageHTML.Find("div", "id", "name-section")
-	releaseTitle := strings.TrimSpace(nameSection.Find("h2", "class", "trackTitle").Text())
-	releaseArtist := strings.TrimSpace(nameSection.Find("span").Find("a").Text())
-	printReleaseName(releaseTitle, releaseArtist)
-
-	releasePath := findReleaseInFolder(releaseTitle, releaseArtist, outputFolder)
-	if monitorFolder != "downloads" {
-		monitoredRelease := findReleaseInFolder(releaseTitle, releaseArtist, monitorFolder)
-		if monitoredRelease != "" {
-			color.New(color.FgGreen).Print(string("==> "))
-			fmt.Printf(`Found "%s" Moving to "%s"`, monitoredRelease, outputFolder)
-			fmt.Print("\n\n")
-			err := os.Rename(monitoredRelease, filepath.Join(outputFolder, filepath.Base(monitoredRelease)))
-			if err != nil {
-				panic(err)
-			}
-			return
+		// Free download logic
+		freeDownloadPage := gjson.Get(tralbum, "freeDownloadPage").String()
+		if freeDownloadPage == "" {
+			releasePageSoup, _ := soup.Get(releaseLink)
+			releasePageHTML = soup.HTMLParse(releasePageSoup)
+			selectDownloadURL := getEmailLink(releaseLink)
+			downloadURL = getPopplersFromSelectDownloadPage(selectDownloadURL)
+			releaseFolder = download(downloadURL, "", "")
+		} else {
+			selectDownloadURL := freeDownloadPage
+			downloadURL = getRetryURL(selectDownloadURL)
+			releaseFolder = download(downloadURL, "", "")
 		}
 	}
-	if downloadQuality == "none" {
-		return
-	}
-	overwrite = o
-	if !o && !checkIfOverwrite(releasePath) {
-		fmt.Println()
-		return
-	}
 
-	tralbum := getAttrJSON("data-tralbum")
-	albumID := gjson.Get(tralbum, "id")
-
-	if collectionSummary == "" {
-		collectionSummary = getCollectionSummary(true)
-	}
-	redownloadMap := organizeRedownloadURLS(collectionSummary)
-
-	salesID := gjson.Get(collectionSummary, fmt.Sprintf(`items.#(item_id=="%s").sale_item_id`, albumID))
-	downloadPageLink := redownloadMap[salesID.String()]
-
-	color.New(color.FgGreen).Print(string("==> "))
-	fmt.Println(downloadPageLink)
-
-	popplersLink := getPopplersFromSelectDownloadPage(downloadPageLink)
-	releaseFolder := download(popplersLink, "", "")
 	finalAdditives(releaseFolder, releaseLink)
 	fmt.Println()
 }
@@ -684,9 +653,9 @@ func availAndDownload(releaseLink string) {
 		fmt.Print("Getting links from Artist Page (May take a while)\n\n")
 		artistPageLinkGen(releaseLink)
 	case 2:
-		purchasedPageDownload(releaseLink)
+		downloadRelease(releaseLink, true)
 	case 3:
-		freePageDownload(releaseLink)
+		downloadRelease(releaseLink, false)
 	case 4:
 		color.Red("### Invalid Link\n\n")
 	default:
