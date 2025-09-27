@@ -719,18 +719,22 @@ func main() {
 	printLogo()
 
 	// Read config json
-	content, err := os.ReadFile("config.json")
+	_, err := os.Stat("config.json")
 	if err != nil {
-		log.Fatal("File reading error", err)
-	}
-	err = json.Unmarshal(content, &config)
-	if err != nil {
-		log.Fatal("Error reading config", err)
-	}
+		// Generate placeholder username if config username is blank
+		config.UserName = strconv.Itoa(rand.Int())
+		config.Identity = ""
 
-	// Generate placeholder username if config username is blank
-	if config.UserName == "" {
-		config.UserName = fmt.Sprint(rand.Int())
+	} else {
+		// Config file exists, read it
+		content, err := os.ReadFile("config.json")
+		if err != nil {
+			log.Fatal("File reading error", err)
+		}
+		err = json.Unmarshal(content, &config)
+		if err != nil {
+			log.Fatal("Error reading config", err)
+		}
 	}
 
 	// Set bandcamp login cookie and generic user agent
@@ -738,7 +742,7 @@ func main() {
 	soup.Header("User-Agent", "Mozilla/5.0 (Windows NT 6.2 rv:20.0) Gecko/20121202 Firefox/20.0")
 
 	// Get CLI flags
-	rlArg := kingpin.Arg("url", "URL to Download").String()
+	rlArg := kingpin.Arg("urls", "URLs to Download (Separated by space)").Strings()
 	batch := kingpin.Flag("batch", "Download From [file]").Short('b').String()
 	zFlag := kingpin.Flag("zipped", "Keep albums in .zip format (don't extract)").Short('z').Bool()
 	dqFlag := kingpin.Flag("quality", "Quality of Download (mp3-v0, mp3-320, flac, aac-hi, vorbis, alac, wav, aiff-lossless) or 'none' to skip downloading entirely").Default("flac").Short('q').String()
@@ -750,7 +754,7 @@ func main() {
 	kingpin.Parse()
 
 	// Assign flags to variables
-	releaseLink := *rlArg
+	releaseLinks := *rlArg
 	keepZip = *zFlag
 	downloadQuality = *dqFlag
 	outputFolder = *ofFlag
@@ -769,10 +773,13 @@ func main() {
 			get(lines[i])
 		}
 	} else {
-		if releaseLink != "" {
-			get(releaseLink)
-		} else {
+		if releaseLinks[0] == "" {
 			color.Red("### Please enter a URL")
+			os.Exit(1)
+		}
+		// Process release links separated by spaces for easier mass-downloading
+		for _, element := range releaseLinks {
+			get(element)
 		}
 	}
 }
