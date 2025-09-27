@@ -718,7 +718,6 @@ var (
 	downloadQuality   string
 	collectionSummary string
 	writeDescription  bool
-	writeReviews      bool
 	noBar             bool
 	keepZip           bool
 	overwrite         bool
@@ -759,7 +758,6 @@ func main() {
 	ofFlag := kingpin.Flag("output", "Output Folder").Default("downloads").Short('o').String()
 	monFlag := kingpin.Flag("monitor", "If existing release is found in this folder, it will be moved to the downloads folder").Default("downloads").Short('m').String()
 	wdFlag := kingpin.Flag("description", "Download and write description to info.txt").Short('d').Bool()
-	wrFlag := kingpin.Flag("reviews", "Download and write reviews to info.txt").Short('r').Bool()
 	nbFlag := kingpin.Flag("nobar", "Turns off progress bar").Short('p').Bool()
 	ovrFlag := kingpin.Flag("overwrite", "Does not ask if you want to overwrite a download").Short('f').Bool()
 	kingpin.Parse()
@@ -771,7 +769,6 @@ func main() {
 	outputFolder = *ofFlag
 	monitorFolder = *monFlag
 	writeDescription = *wdFlag
-	writeReviews = *wrFlag
 	noBar = *nbFlag
 	o = *ovrFlag
 
