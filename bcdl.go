@@ -728,16 +728,6 @@ func main() {
 	// Print logo. wow.
 	printLogo()
 
-	// If config file does not exist, create and fill with instructions
-	if _, err := os.Stat("config.yaml"); os.IsNotExist(err) {
-		configExample := []byte(
-			"# Load bandcamp.com -> Inspect Element -> Application -> Cookies -> identity\n" +
-				"identity: \n" +
-				"# Your profile name - bandcamp.com/(username)\n" +
-				"username: ")
-		os.WriteFile("config.yaml", configExample, 0644)
-	}
-
 	// Load config file data
 	configor.Load(&config, "config.yaml")
 
