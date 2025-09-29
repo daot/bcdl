@@ -2,11 +2,10 @@ package main
 
 import (
 	"archive/zip"
-	"bufio"
+	"encoding/json"
 	"fmt"
 	"html"
 	"io"
-	"io/ioutil"
 	"log"
 	"math/rand"
 	"mime"
@@ -23,74 +22,17 @@ import (
 	"github.com/anaskhan96/soup"
 	"github.com/cheggaaa/pb"
 	"github.com/fatih/color"
-	"github.com/jinzhu/configor"
 	"github.com/tidwall/gjson"
 )
 
-func getReviews(releaseFolder string, releaseLink string) {
-	parsedURL, _ := url.Parse(releaseLink)
-	dataEmbed := getAttrJSON("data-embed")
-
-	albumID := gjson.Get(dataEmbed, "tralbum_param.value").String()
-	releaseType := gjson.Get(dataEmbed, "tralbum_param.name").String()
-
-	// Get all reviews from release
-	jsonstring, err := soup.Post(fmt.Sprintf(`https://%s/api/tralbumcollectors/2/reviews`, parsedURL.Host),
-		"application/x-www-form-urlencoded",
-		fmt.Sprintf(`{"tralbum_type":"%s","tralbum_id":%s,"token":"1:9999999999:9999999999:1:1:0","count":9999999999,"exclude_fan_ids":[]}`, string(releaseType[0]), albumID))
-	if err != nil {
-		panic(err)
-	}
-
-	prefix := "\n\n"
-	if !writeDescription {
-		prefix = ""
-		writeToFile(filepath.Join(releaseFolder, "info.txt"), "")
-	}
-
-	f, err := os.OpenFile(filepath.Join(releaseFolder, "info.txt"), os.O_RDWR|os.O_CREATE, 0755)
-	if err != nil {
-		panic(err)
-	}
-
-	defer f.Close()
-
-	// If there are reviews, write them
-	if gjson.Get(jsonstring, "results.#").Int() != 0 {
-		if _, err = f.WriteString(prefix + "# Reviews:"); err != nil {
-			panic(err)
-		}
-
-		for _, k := range gjson.Get(jsonstring, "results").Array() {
-			cleaned := removeWhiteSpace(strings.TrimSpace(html.UnescapeString(k.String())))
-			review := "\n\n" + gjson.Get(cleaned, "name").String() +
-				" (" + gjson.Get(cleaned, "username").String() + "): " +
-				gjson.Get(cleaned, "why").String()
-			if _, err = f.WriteString(review); err != nil {
-				panic(err)
-			}
-		}
-	}
-}
-
-// https://golangcode.com/writing-to-file/
-func writeToFile(filename string, data string) error {
-	file, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	_, err = io.WriteString(file, data)
-	if err != nil {
-		return err
-	}
-	return file.Sync()
-}
-
 func getDescription(releaseFolder string) {
 	description := releasePageHTML.Find("meta", "name", "description").Attrs()["content"]
-	writeToFile(filepath.Join(releaseFolder, "info.txt"), strings.TrimSpace(html.UnescapeString(description)))
+
+	d1 := []byte(strings.TrimSpace(html.UnescapeString(description)))
+	err := os.WriteFile(filepath.Join(releaseFolder, "info.txt"), d1, 0644)
+	if err != nil {
+		log.Fatal("Error writing info.txt file", err)
+	}
 }
 
 func finalAdditives(releaseFolder string, releaseLink string) {
@@ -101,11 +43,6 @@ func finalAdditives(releaseFolder string, releaseLink string) {
 		color.New(color.FgCyan).Print(string(">>> "))
 		fmt.Println("Writing Description")
 		getDescription(releaseFolder)
-	}
-	if writeReviews {
-		color.New(color.FgCyan).Print(string(">>> "))
-		fmt.Println("Writing Reviews")
-		getReviews(releaseFolder, releaseLink)
 	}
 }
 
@@ -387,7 +324,7 @@ func getAttrJSON(attr string) string {
 	return r
 }
 
-func freePageDownload(releaseLink string) {
+func downloadRelease(releaseLink string, isPurchased bool) {
 	nameSection := releasePageHTML.Find("div", "id", "name-section")
 	releaseTitle := strings.TrimSpace(nameSection.Find("h2", "class", "trackTitle").Text())
 	releaseArtist := strings.TrimSpace(nameSection.Find("span").Find("a").Text())
@@ -417,73 +354,42 @@ func freePageDownload(releaseLink string) {
 		return
 	}
 
-	// Searching for direct link to free download page. If mmissing, the release may be behind an email wall
 	var downloadURL string
 	var releaseFolder string
 	tralbum := getAttrJSON("data-tralbum")
-	freeDownloadPage := gjson.Get(tralbum, "freeDownloadPage").String()
-	if freeDownloadPage == "" {
-		releasePageSoup, _ := soup.Get(releaseLink)
-		releasePageHTML = soup.HTMLParse(releasePageSoup)
+	if isPurchased {
 
-		selectDownloadURL := getEmailLink(releaseLink)
-		downloadURL = getPopplersFromSelectDownloadPage(selectDownloadURL)
+		albumID := gjson.Get(tralbum, "id")
+
+		if collectionSummary == "" {
+			collectionSummary = getCollectionSummary(true)
+		}
+		redownloadMap := organizeRedownloadURLS(collectionSummary)
+
+		salesID := gjson.Get(collectionSummary, fmt.Sprintf(`items.#(item_id=="%s").sale_item_id`, albumID))
+		downloadPageLink := redownloadMap[salesID.String()]
+
+		color.New(color.FgGreen).Print(string("==> "))
+		fmt.Println(downloadPageLink)
+
+		downloadURL = getPopplersFromSelectDownloadPage(downloadPageLink)
 		releaseFolder = download(downloadURL, "", "")
 	} else {
-		selectDownloadURL := freeDownloadPage
-		downloadURL = getRetryURL(selectDownloadURL)
-		releaseFolder = download(downloadURL, "", "")
-	}
-
-	finalAdditives(releaseFolder, releaseLink)
-	fmt.Println()
-}
-
-func purchasedPageDownload(releaseLink string) {
-	nameSection := releasePageHTML.Find("div", "id", "name-section")
-	releaseTitle := strings.TrimSpace(nameSection.Find("h2", "class", "trackTitle").Text())
-	releaseArtist := strings.TrimSpace(nameSection.Find("span").Find("a").Text())
-	printReleaseName(releaseTitle, releaseArtist)
-
-	releasePath := findReleaseInFolder(releaseTitle, releaseArtist, outputFolder)
-	if monitorFolder != "downloads" {
-		monitoredRelease := findReleaseInFolder(releaseTitle, releaseArtist, monitorFolder)
-		if monitoredRelease != "" {
-			color.New(color.FgGreen).Print(string("==> "))
-			fmt.Printf(`Found "%s" Moving to "%s"`, monitoredRelease, outputFolder)
-			fmt.Print("\n\n")
-			err := os.Rename(monitoredRelease, filepath.Join(outputFolder, filepath.Base(monitoredRelease)))
-			if err != nil {
-				panic(err)
-			}
-			return
+		// Free download logic
+		freeDownloadPage := gjson.Get(tralbum, "freeDownloadPage").String()
+		if freeDownloadPage == "" {
+			releasePageSoup, _ := soup.Get(releaseLink)
+			releasePageHTML = soup.HTMLParse(releasePageSoup)
+			selectDownloadURL := getEmailLink(releaseLink)
+			downloadURL = getPopplersFromSelectDownloadPage(selectDownloadURL)
+			releaseFolder = download(downloadURL, "", "")
+		} else {
+			selectDownloadURL := freeDownloadPage
+			downloadURL = getRetryURL(selectDownloadURL)
+			releaseFolder = download(downloadURL, "", "")
 		}
 	}
-	if downloadQuality == "none" {
-		return
-	}
-	overwrite = o
-	if !o && !checkIfOverwrite(releasePath) {
-		fmt.Println()
-		return
-	}
 
-	tralbum := getAttrJSON("data-tralbum")
-	albumID := gjson.Get(tralbum, "id")
-
-	if collectionSummary == "" {
-		collectionSummary = getCollectionSummary(true)
-	}
-	redownloadMap := organizeRedownloadURLS(collectionSummary)
-
-	salesID := gjson.Get(collectionSummary, fmt.Sprintf(`items.#(item_id=="%s").sale_item_id`, albumID))
-	downloadPageLink := redownloadMap[salesID.String()]
-
-	color.New(color.FgGreen).Print(string("==> "))
-	fmt.Println(downloadPageLink)
-
-	popplersLink := getPopplersFromSelectDownloadPage(downloadPageLink)
-	releaseFolder := download(popplersLink, "", "")
 	finalAdditives(releaseFolder, releaseLink)
 	fmt.Println()
 }
@@ -680,7 +586,7 @@ func userPageLinkGen(releaseLink string) {
 }
 
 // Finds out what type of release the link is
-func checkReleaseAvailability(link string) int {
+func checkReleaseAvailability() int {
 	releaseType := releasePageHTML.Find("meta", "property", "og:type")
 	if releaseType.Error != nil {
 		return 4
@@ -726,7 +632,7 @@ func paidLink(link string) {
 
 // Directs the link to appropriate downloader
 func availAndDownload(releaseLink string) {
-	releaseAvailability := checkReleaseAvailability(releaseLink)
+	releaseAvailability := checkReleaseAvailability()
 	switch releaseAvailability {
 	case 0:
 		color.New(color.FgCyan).Print(string(">>> "))
@@ -737,9 +643,9 @@ func availAndDownload(releaseLink string) {
 		fmt.Print("Getting links from Artist Page (May take a while)\n\n")
 		artistPageLinkGen(releaseLink)
 	case 2:
-		purchasedPageDownload(releaseLink)
+		downloadRelease(releaseLink, true)
 	case 3:
-		freePageDownload(releaseLink)
+		downloadRelease(releaseLink, false)
 	case 4:
 		color.Red("### Invalid Link\n\n")
 	default:
@@ -766,25 +672,6 @@ func get(releaseLink string) {
 	availAndDownload(releaseLink)
 }
 
-// Reads file and returns lines as array
-func scanLines(path string) ([]string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	scanner.Split(bufio.ScanLines)
-
-	var lines []string
-	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
-	}
-
-	return lines, nil
-}
-
 // Prints logo at startup
 func printLogo() {
 	logo := `
@@ -809,8 +696,8 @@ func printLogo() {
 
 // Config for login
 var config = struct {
-	Identity string
-	UserName string
+	Identity string `json:"identity"`
+	UserName string `json:"username"`
 }{}
 
 // Common global variables
@@ -821,7 +708,6 @@ var (
 	downloadQuality   string
 	collectionSummary string
 	writeDescription  bool
-	writeReviews      bool
 	noBar             bool
 	keepZip           bool
 	overwrite         bool
@@ -829,26 +715,23 @@ var (
 )
 
 func main() {
-	// Print logo. wow.
-	printLogo()
+	// Read config json
+	_, err := os.Stat("config.json")
+	if err != nil {
+		// Generate placeholder username if config username is blank
+		config.UserName = strconv.Itoa(rand.Int())
+		config.Identity = ""
 
-	// If config file does not exist, create and fill with instructions
-	if _, err := os.Stat("config.yaml"); os.IsNotExist(err) {
-		configExample := []byte(
-			"# Load bandcamp.com -> Inspect Element -> Application -> Cookies -> identity\n" +
-				"identity: \n" +
-				"# Your profile name - bandcamp.com/(username)\n" +
-				"username: ")
-		ioutil.WriteFile("config.yaml", configExample, 0644)
-	}
-
-	// Load config file data
-	configor.Load(&config, "config.yaml")
-
-	// Generate placeholder username if config username is blank
-	if config.UserName == "" {
-		rand.Seed(time.Now().UnixNano())
-		config.UserName = fmt.Sprint(rand.Int())
+	} else {
+		// Config file exists, read it
+		content, err := os.ReadFile("config.json")
+		if err != nil {
+			log.Fatal("File reading error", err)
+		}
+		err = json.Unmarshal(content, &config)
+		if err != nil {
+			log.Fatal("Error reading config", err)
+		}
 	}
 
 	// Set bandcamp login cookie and generic user agent
@@ -856,51 +739,50 @@ func main() {
 	soup.Header("User-Agent", "Mozilla/5.0 (Windows NT 6.2 rv:20.0) Gecko/20121202 Firefox/20.0")
 
 	// Get CLI flags
-	rlArg := kingpin.Arg("url", "URL to Download").String()
-	batch := kingpin.Flag("batch", "Download From download_links.txt").Short('b').Bool()
+	rlArg := kingpin.Arg("urls", "URLs to Download (Separated by space)").Strings()
+	batch := kingpin.Flag("batch", "Download From [file]").Short('b').String()
 	zFlag := kingpin.Flag("zipped", "Keep albums in .zip format (don't extract)").Short('z').Bool()
 	dqFlag := kingpin.Flag("quality", "Quality of Download (mp3-v0, mp3-320, flac, aac-hi, vorbis, alac, wav, aiff-lossless) or 'none' to skip downloading entirely").Default("flac").Short('q').String()
 	ofFlag := kingpin.Flag("output", "Output Folder").Default("downloads").Short('o').String()
 	monFlag := kingpin.Flag("monitor", "If existing release is found in this folder, it will be moved to the downloads folder").Default("downloads").Short('m').String()
 	wdFlag := kingpin.Flag("description", "Download and write description to info.txt").Short('d').Bool()
-	wrFlag := kingpin.Flag("reviews", "Download and write reviews to info.txt").Short('r').Bool()
 	nbFlag := kingpin.Flag("nobar", "Turns off progress bar").Short('p').Bool()
 	ovrFlag := kingpin.Flag("overwrite", "Does not ask if you want to overwrite a download").Short('f').Bool()
+	logoFlag := kingpin.Flag("nologo", "Disables logo").Short('n').Bool()
 	kingpin.Parse()
 
 	// Assign flags to variables
-	releaseLink := *rlArg
+	releaseLinks := *rlArg
 	keepZip = *zFlag
 	downloadQuality = *dqFlag
 	outputFolder = *ofFlag
 	monitorFolder = *monFlag
 	writeDescription = *wdFlag
-	writeReviews = *wrFlag
 	noBar = *nbFlag
 	o = *ovrFlag
+	logo := *logoFlag
 
-	if *batch {
-		// Batch downloading
-		if _, err := os.Stat("download_links.txt"); os.IsNotExist(err) {
-			color.Blue("--- Created download_links.txt")
-			os.Create("download_links.txt")
-			os.Exit(0)
-		}
+	if !logo {
+		printLogo()
+	}
 
-		data, err := scanLines("download_links.txt")
+	if *batch != "" {
+		content, err := os.ReadFile(*batch)
 		if err != nil {
-			fmt.Println("File reading error", err)
-			os.Exit(0)
+			log.Fatal("File reading error", err)
 		}
-
-		for i := 0; i < len(data); i++ {
-			get(data[i])
+		lines := strings.Split(string(content), "\n")
+		for i := 0; i < len(lines); i++ {
+			get(lines[i])
 		}
 	} else {
-		if releaseLink != "" {
-			get(releaseLink)
-		} else {
+		if releaseLinks == nil {
 			color.Red("### Please enter a URL")
+			os.Exit(1)
+		}
+		// Process release links separated by spaces for easier mass-downloading
+		for _, element := range releaseLinks {
+			get(element)
 		}
 	}
 }
