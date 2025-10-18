@@ -423,14 +423,29 @@ func artistPageLinkGen(releaseLink string) {
 		log.Fatal(err)
 	}
 
-	// Gets all links in the middle box
-	for _, boxLink := range releasePageHTML.Find("div", "class", "leftMiddleColumns").FindAll("a") {
+	// Gets all links in the music grid
+	musicGrid :=releasePageHTML.Find("ol","id","music-grid")
+
+	for _, boxLink := range musicGrid.FindAll("a") {
 		rel, err := u.Parse(boxLink.Attrs()["href"])
 		if err != nil {
 			log.Fatal(err)
 		}
 		pageLinks = append(pageLinks, rel.String())
 	}
+
+	// Check for javascript-rendered entries
+	j := musicGrid.Attrs()["data-client-items"]
+	var items []map[string]string
+	json.Unmarshal([]byte(j), &items)
+	for _, item := range items {
+		rel, err := u.Parse(item["page_url"])
+		if err != nil {
+		log.Fatal(err)
+		}
+		pageLinks = append(pageLinks, rel.String())
+	}
+	
 
 	// Removes duplicate values from pages that have featured releases
 	pageLinks = removeDuplicateValues(pageLinks)
