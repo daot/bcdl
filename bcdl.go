@@ -25,6 +25,14 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+func sanitize(path string) string {
+	//meant to behave equivalently to whatever bandcamp uses
+	//probably not perfect
+	return regexp.MustCompile(`[=,<>[\]]+|-+$`).ReplaceAllString(
+		regexp.MustCompile(`[%*|,/\\]`).ReplaceAllString(path, "-"),
+		"")
+}
+
 func getDescription(releaseFolder string) {
 	description := releasePageHTML.Find("meta", "name", "description").Attrs()["content"]
 
@@ -514,8 +522,8 @@ func printReleaseName(releaseTitle string, releaseArtist string) {
 
 func findReleaseInFolder(releaseTitle string, releaseArtist string, searchFolder string) string {
 	// Bandcamp downloads have the standard format of ArtistName - ReleaseTitle
-	folderPath := fmt.Sprintf("%s - %s", releaseArtist, releaseTitle)
 
+	folderPath := sanitize(fmt.Sprintf("%s - %s", releaseArtist, releaseTitle))
 	// Get a list of all files and subdirectories in the specified folder
 	files, err := filepath.Glob(filepath.Join(searchFolder, "*"))
 	if err != nil {
