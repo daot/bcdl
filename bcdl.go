@@ -204,8 +204,14 @@ func getPopplersFromSelectDownloadPage(selectDownloadURL string) string {
 	// Change some of the url parameters because email download links and collection download links are different.
 	if urlQuerys.Get("from") == "collection" {
 		selectDownloadPageHTML, _ := soup.Get(selectDownloadURL)
-		urlQuerys.Set("id", regexp.MustCompile(`id=(\d*)&`).FindStringSubmatch(selectDownloadPageHTML)[1])
-		urlQuerys.Set("type", regexp.MustCompile(`\/download\/(album|track)\?`).FindStringSubmatch(selectDownloadPageHTML)[1])
+		id:=regexp.MustCompile(`id=(\d*)&`).FindStringSubmatch(selectDownloadPageHTML)
+		t:=regexp.MustCompile(`\/download\/(album|track)\?`).FindStringSubmatch(selectDownloadPageHTML)
+		if id == nil || t == nil {
+			color.Red("### Download not available")
+			return ""
+		}
+		urlQuerys.Set("id", id[1])
+		urlQuerys.Set("type", t[1])
 	}
 
 	params := url.Values{}
