@@ -28,7 +28,7 @@ import (
 func sanitize(path string) string {
 	//meant to mimic whatever bandcamp uses
 	//probably not perfect
-	return regexp.MustCompile(`[=,:<>[\]]+|[-,\.]+$`).ReplaceAllString(
+	return regexp.MustCompile(`^[-\.]+|[=,:<>[\]]+|[-\.]+$`).ReplaceAllString(
 		regexp.MustCompile(`[%*?|,/\\]`).ReplaceAllString(path, "-"),
 		"")
 }
