@@ -26,10 +26,10 @@ import (
 )
 
 func sanitize(path string) string {
-	//meant to behave equivalently to whatever bandcamp uses
+	//meant to mimic whatever bandcamp uses
 	//probably not perfect
-	return regexp.MustCompile(`[=,<>[\]]+|-+$`).ReplaceAllString(
-		regexp.MustCompile(`[%*|,/\\]`).ReplaceAllString(path, "-"),
+	return regexp.MustCompile(`[=,:<>[\]]+|[-,\.]+$`).ReplaceAllString(
+		regexp.MustCompile(`[%*?|,/\\]`).ReplaceAllString(path, "-"),
 		"")
 }
 
@@ -601,7 +601,7 @@ func userPageLinkGen(releaseLink string) {
 		collectionSummary = getCollectionSummary(true)
 
 		for _, k := range gjson.Get(collectionSummary, "items").Array() {
-			if !preDownloadCheck(gjson.Get(k.Raw, "album_title").String(),
+			if !preDownloadCheck(gjson.Get(k.Raw, "item_title").String(),
 				gjson.Get(k.Raw, "band_name").String()){
 					continue
 				}
