@@ -330,13 +330,16 @@ func getAttrJSON(attr string) string {
 	return r
 }
 
-func downloadRelease(releaseLink string, isPurchased bool) {
-	nameSection := releasePageHTML.Find("div", "id", "name-section")
-	releaseTitle := strings.TrimSpace(nameSection.Find("h2", "class", "trackTitle").Text())
-	releaseArtist := strings.TrimSpace(nameSection.Find("span").Find("a").Text())
+//print release name and check if the release should be downloaded
+func preDownloadCheck(releaseTitle string, releaseArtist string) bool {
 	printReleaseName(releaseTitle, releaseArtist)
-
 	releasePath := findReleaseInFolder(releaseTitle, releaseArtist, outputFolder)
+	
+	if(skip>0){
+		fmt.Println("Skipping...")
+		skip--
+		return false
+	}
 	if monitorFolder != "downloads" {
 		monitoredRelease := findReleaseInFolder(releaseTitle, releaseArtist, monitorFolder)
 		if monitoredRelease != "" {
@@ -347,18 +350,30 @@ func downloadRelease(releaseLink string, isPurchased bool) {
 			if err != nil {
 				panic(err)
 			}
-			return
+			return false
 		}
 	}
 	if downloadQuality == "none" {
 		fmt.Print("\n")
-		return
+		return false
 	}
-	overwrite = o
-	if !o && !checkIfOverwrite(releasePath) {
+	overwrite = true
+	if o!="always" && !checkIfOverwrite(releasePath) {
 		fmt.Println()
+		overwrite = false
+		return false
+	}
+	return true
+}
+func downloadRelease(releaseLink string, isPurchased bool) {
+	nameSection := releasePageHTML.Find("div", "id", "name-section")
+	releaseTitle := strings.TrimSpace(nameSection.Find("h2", "class", "trackTitle").Text())
+	releaseArtist := strings.TrimSpace(nameSection.Find("span").Find("a").Text())
+  
+	if !preDownloadCheck(releaseTitle,releaseArtist){
 		return
 	}
+
 
 	var downloadURL string
 	var releaseFolder string
@@ -533,6 +548,10 @@ func checkIfOverwrite(releasePath string) bool {
 	_, err := os.Stat(releasePath)
 	_, err2 := os.Stat(releasePath + ".zip")
 	if !os.IsNotExist(err) || !os.IsNotExist(err2) {
+		if o=="never" {
+			fmt.Println("File already exists, skipping...")
+			return false
+		}
 		var choice string
 		for strings.ToLower(choice) != "y" && strings.ToLower(choice) != "n" {
 			color.New(color.FgGreen).Print(string("==> "))
@@ -574,8 +593,10 @@ func userPageLinkGen(releaseLink string) {
 		collectionSummary = getCollectionSummary(true)
 
 		for _, k := range gjson.Get(collectionSummary, "items").Array() {
-			printReleaseName(gjson.Get(k.Raw, "album_title").String(),
-				gjson.Get(k.Raw, "band_name").String())
+			if !preDownloadCheck(gjson.Get(k.Raw, "album_title").String(),
+				gjson.Get(k.Raw, "band_name").String()){
+					continue
+				}
 
 			redownloadMap := organizeRedownloadURLS(collectionSummary)
 
@@ -679,7 +700,6 @@ func availAndDownload(releaseLink string) {
 func get(releaseLink string) {
 	color.New(color.FgGreen).Print(string("==> "))
 	fmt.Println(releaseLink)
-
 	releaseLink = strings.TrimSpace(releaseLink)
 	u, _ := url.Parse(releaseLink)
 	releaseLink = string(u.String())
@@ -732,7 +752,8 @@ var (
 	noBar             bool
 	keepZip           bool
 	overwrite         bool
-	o                 bool
+	o                 string
+	skip              int
 )
 
 func main() {
@@ -768,10 +789,11 @@ func main() {
 	monFlag := kingpin.Flag("monitor", "If existing release is found in this folder, it will be moved to the downloads folder").Default("downloads").Short('m').String()
 	wdFlag := kingpin.Flag("description", "Download and write description to info.txt").Short('d').Bool()
 	nbFlag := kingpin.Flag("nobar", "Turns off progress bar").Short('p').Bool()
-	ovrFlag := kingpin.Flag("overwrite", "Does not ask if you want to overwrite a download").Short('f').Bool()
 	logoFlag := kingpin.Flag("nologo", "Disables logo").Short('n').Bool()
+	skipFlag := kingpin.Flag("skip", "Skip the first N downloads unconditionally").Short('s').PlaceHolder("N").Int()
+	ovrFlag := kingpin.Flag("overwrite", "when to overwrite a download (always, ask, never)").PlaceHolder("WHEN").Default("ask").Enum("always", "ask", "never")
+	
 	kingpin.Parse()
-
 	// Assign flags to variables
 	releaseLinks := *rlArg
 	keepZip = *zFlag
@@ -782,6 +804,7 @@ func main() {
 	noBar = *nbFlag
 	o = *ovrFlag
 	logo := *logoFlag
+	skip = *skipFlag
 
 	if !logo {
 		printLogo()
