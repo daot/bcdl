@@ -123,6 +123,7 @@ func download(url string, releaseFolder string, filenamePrefix string) string {
 retry:
 	resp, err := http.Get(url)
 	if err != nil {
+		fmt.Println(err)
 		color.Red("### Unable to download")
 		return ""
 	}
@@ -206,37 +207,13 @@ retry:
 }
 
 func getPopplersFromSelectDownloadPage(selectDownloadURL string) string {
-	parsedURL, _ := url.Parse(selectDownloadURL)
-	urlQuerys := parsedURL.Query()
-
-	// Change some of the url parameters because email download links and collection download links are different.
-	if urlQuerys.Get("from") == "collection" {
-		selectDownloadPageHTML, _ := soup.Get(selectDownloadURL)
-		id:=regexp.MustCompile(`id=(\d*)&`).FindStringSubmatch(selectDownloadPageHTML)
-		t:=regexp.MustCompile(`\/download\/(album|track)\?`).FindStringSubmatch(selectDownloadPageHTML)
-		if id == nil || t == nil {
-			color.Red("### Download not available")
-			return ""
-		}
-		urlQuerys.Set("id", id[1])
-		urlQuerys.Set("type", t[1])
-	}
-
-	params := url.Values{}
-	params.Add("enc", downloadQuality)
-	params.Add("id", urlQuerys.Get("id"))
-	params.Add("payment_id", urlQuerys.Get("payment_id"))
-	params.Add("sig", urlQuerys.Get("sig"))
-	params.Add(".rand", "1234567891234")
-	params.Add(".vrs", "1")
-
-	popplersPage, _ := soup.Get("https://popplers5.bandcamp.com/statdownload/" + urlQuerys.Get("type") + "?" + params.Encode())
-	jsonString := regexp.MustCompile(`{\".*\"}`).FindString(popplersPage)
-	downloadURL := gjson.Get(jsonString, "download_url").String()
+	selectDownloadPageHTML, _ := soup.Get(selectDownloadURL)
+	selectDownloadPageSoup := soup.HTMLParse(selectDownloadPageHTML)
+	jsonString := selectDownloadPageSoup.Find("div","id","pagedata").Attrs()["data-blob"]
+	downloadURL := gjson.Get(jsonString,"download_items.0.downloads."+downloadQuality+".url").String()
 
 	color.New(color.FgGreen).Print(string("==> "))
 	fmt.Println(downloadURL)
-
 	return downloadURL
 }
 
