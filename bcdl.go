@@ -28,8 +28,8 @@ import (
 func sanitize(path string) string {
 	//meant to mimic whatever bandcamp uses
 	//probably not perfect
-	return regexp.MustCompile(`^[-\.]+|[=,:<>[\]]+|[-\.]+$`).ReplaceAllString(
-		regexp.MustCompile(`[%*?|,/\\]`).ReplaceAllString(path, "-"),
+	return regexp.MustCompile(`^[-\.\s]+|[-\.\s]+$`).ReplaceAllString(
+		regexp.MustCompile(`[%*?"|,/\\[\]:=<>]+`).ReplaceAllString(path, "-"),
 		"")
 }
 
@@ -126,11 +126,14 @@ retry:
 		fmt.Println(err)
 		color.Red("### Unable to download")
 		return ""
-	}
+	}	
+	//output response to file for debugging
+	//os.WriteFile("response.txt",resp, 0644)
 	defer resp.Body.Close()
 
 	_, params, _ := mime.ParseMediaType(resp.Header.Get("Content-Disposition"))
 	if params == nil {
+		fmt.Println(resp.Header)
 		color.Red("### Artist out of Free Downloads")
 		return ""
 	}
@@ -323,8 +326,11 @@ func preDownloadCheck(releaseTitle string, releaseArtist string) bool {
 	if(skip>0){
 		fmt.Println("Skipping...")
 		skip--
+		fmt.Println(skip)
 		return false
 	}
+	skip--
+	fmt.Println(skip)
 	if monitorFolder != "downloads" {
 		monitoredRelease := findReleaseInFolder(releaseTitle, releaseArtist, monitorFolder)
 		if monitoredRelease != "" {
@@ -500,7 +506,8 @@ func printReleaseName(releaseTitle string, releaseArtist string) {
 func findReleaseInFolder(releaseTitle string, releaseArtist string, searchFolder string) string {
 	// Bandcamp downloads have the standard format of ArtistName - ReleaseTitle
 
-	folderPath := sanitize(fmt.Sprintf("%s - %s", releaseArtist, releaseTitle))
+	// matches how Bandcamp names files in most cases
+	folderPath := sanitize(fmt.Sprintf("%s - %s", releaseArtist, sanitize(releaseTitle)))
 	// Get a list of all files and subdirectories in the specified folder
 	files, err := filepath.Glob(filepath.Join(searchFolder, "*"))
 	if err != nil {
