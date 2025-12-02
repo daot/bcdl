@@ -25,6 +25,14 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+func sanitize(path string) string {
+	//meant to mimic whatever bandcamp uses
+	//probably not perfect
+	return regexp.MustCompile(`^[-\.\s]+|[-\.\s]+$`).ReplaceAllString(
+		regexp.MustCompile(`[%*?"|,/\\[\]:=<>]+`).ReplaceAllString(path, "-"),
+		"")
+}
+
 func getDescription(releaseFolder string) {
 	description := releasePageHTML.Find("meta", "name", "description").Attrs()["content"]
 
@@ -115,13 +123,17 @@ func download(url string, releaseFolder string, filenamePrefix string) string {
 retry:
 	resp, err := http.Get(url)
 	if err != nil {
+		fmt.Println(err)
 		color.Red("### Unable to download")
 		return ""
-	}
+	}	
+	//output response to file for debugging
+	//os.WriteFile("response.txt",resp, 0644)
 	defer resp.Body.Close()
 
 	_, params, _ := mime.ParseMediaType(resp.Header.Get("Content-Disposition"))
 	if params == nil {
+		fmt.Println(resp.Header)
 		color.Red("### Artist out of Free Downloads")
 		return ""
 	}
@@ -198,31 +210,13 @@ retry:
 }
 
 func getPopplersFromSelectDownloadPage(selectDownloadURL string) string {
-	parsedURL, _ := url.Parse(selectDownloadURL)
-	urlQuerys := parsedURL.Query()
-
-	// Change some of the url parameters because email download links and collection download links are different.
-	if urlQuerys.Get("from") == "collection" {
-		selectDownloadPageHTML, _ := soup.Get(selectDownloadURL)
-		urlQuerys.Set("id", regexp.MustCompile(`id=(\d*)&`).FindStringSubmatch(selectDownloadPageHTML)[1])
-		urlQuerys.Set("type", regexp.MustCompile(`\/download\/(album|track)\?`).FindStringSubmatch(selectDownloadPageHTML)[1])
-	}
-
-	params := url.Values{}
-	params.Add("enc", downloadQuality)
-	params.Add("id", urlQuerys.Get("id"))
-	params.Add("payment_id", urlQuerys.Get("payment_id"))
-	params.Add("sig", urlQuerys.Get("sig"))
-	params.Add(".rand", "1234567891234")
-	params.Add(".vrs", "1")
-
-	popplersPage, _ := soup.Get("https://popplers5.bandcamp.com/statdownload/" + urlQuerys.Get("type") + "?" + params.Encode())
-	jsonString := regexp.MustCompile(`{\".*\"}`).FindString(popplersPage)
-	downloadURL := gjson.Get(jsonString, "download_url").String()
+	selectDownloadPageHTML, _ := soup.Get(selectDownloadURL)
+	selectDownloadPageSoup := soup.HTMLParse(selectDownloadPageHTML)
+	jsonString := selectDownloadPageSoup.Find("div","id","pagedata").Attrs()["data-blob"]
+	downloadURL := gjson.Get(jsonString,"download_items.0.downloads."+downloadQuality+".url").String()
 
 	color.New(color.FgGreen).Print(string("==> "))
 	fmt.Println(downloadURL)
-
 	return downloadURL
 }
 
@@ -324,13 +318,19 @@ func getAttrJSON(attr string) string {
 	return r
 }
 
-func downloadRelease(releaseLink string, isPurchased bool) {
-	nameSection := releasePageHTML.Find("div", "id", "name-section")
-	releaseTitle := strings.TrimSpace(nameSection.Find("h2", "class", "trackTitle").Text())
-	releaseArtist := strings.TrimSpace(nameSection.Find("span").Find("a").Text())
+//print release name and check if the release should be downloaded
+func preDownloadCheck(releaseTitle string, releaseArtist string) bool {
 	printReleaseName(releaseTitle, releaseArtist)
-
 	releasePath := findReleaseInFolder(releaseTitle, releaseArtist, outputFolder)
+	
+	if(skip>0){
+		fmt.Println("Skipping...")
+		skip--
+		fmt.Println(skip)
+		return false
+	}
+	skip--
+	fmt.Println(skip)
 	if monitorFolder != "downloads" {
 		monitoredRelease := findReleaseInFolder(releaseTitle, releaseArtist, monitorFolder)
 		if monitoredRelease != "" {
@@ -341,18 +341,30 @@ func downloadRelease(releaseLink string, isPurchased bool) {
 			if err != nil {
 				panic(err)
 			}
-			return
+			return false
 		}
 	}
 	if downloadQuality == "none" {
 		fmt.Print("\n")
-		return
+		return false
 	}
-	overwrite = o
-	if !o && !checkIfOverwrite(releasePath) {
+	overwrite = true
+	if o!="always" && !checkIfOverwrite(releasePath) {
 		fmt.Println()
+		overwrite = false
+		return false
+	}
+	return true
+}
+func downloadRelease(releaseLink string, isPurchased bool) {
+	nameSection := releasePageHTML.Find("div", "id", "name-section")
+	releaseTitle := strings.TrimSpace(nameSection.Find("h2", "class", "trackTitle").Text())
+	releaseArtist := strings.TrimSpace(nameSection.Find("span").Find("a").Text())
+  
+	if !preDownloadCheck(releaseTitle,releaseArtist){
 		return
 	}
+
 
 	var downloadURL string
 	var releaseFolder string
@@ -423,14 +435,29 @@ func artistPageLinkGen(releaseLink string) {
 		log.Fatal(err)
 	}
 
-	// Gets all links in the middle box
-	for _, boxLink := range releasePageHTML.Find("div", "class", "leftMiddleColumns").FindAll("a") {
+	// Gets all links in the music grid
+	musicGrid :=releasePageHTML.Find("ol","id","music-grid")
+
+	for _, boxLink := range musicGrid.FindAll("a") {
 		rel, err := u.Parse(boxLink.Attrs()["href"])
 		if err != nil {
 			log.Fatal(err)
 		}
 		pageLinks = append(pageLinks, rel.String())
 	}
+
+	// Check for javascript-rendered entries
+	j := musicGrid.Attrs()["data-client-items"]
+	var items []map[string]string
+	json.Unmarshal([]byte(j), &items)
+	for _, item := range items {
+		rel, err := u.Parse(item["page_url"])
+		if err != nil {
+		log.Fatal(err)
+		}
+		pageLinks = append(pageLinks, rel.String())
+	}
+	
 
 	// Removes duplicate values from pages that have featured releases
 	pageLinks = removeDuplicateValues(pageLinks)
@@ -478,8 +505,9 @@ func printReleaseName(releaseTitle string, releaseArtist string) {
 
 func findReleaseInFolder(releaseTitle string, releaseArtist string, searchFolder string) string {
 	// Bandcamp downloads have the standard format of ArtistName - ReleaseTitle
-	folderPath := fmt.Sprintf("%s - %s", releaseArtist, releaseTitle)
 
+	// matches how Bandcamp names files in most cases
+	folderPath := sanitize(fmt.Sprintf("%s - %s", releaseArtist, sanitize(releaseTitle)))
 	// Get a list of all files and subdirectories in the specified folder
 	files, err := filepath.Glob(filepath.Join(searchFolder, "*"))
 	if err != nil {
@@ -512,6 +540,10 @@ func checkIfOverwrite(releasePath string) bool {
 	_, err := os.Stat(releasePath)
 	_, err2 := os.Stat(releasePath + ".zip")
 	if !os.IsNotExist(err) || !os.IsNotExist(err2) {
+		if o=="never" {
+			fmt.Println("File already exists, skipping...")
+			return false
+		}
 		var choice string
 		for strings.ToLower(choice) != "y" && strings.ToLower(choice) != "n" {
 			color.New(color.FgGreen).Print(string("==> "))
@@ -553,8 +585,10 @@ func userPageLinkGen(releaseLink string) {
 		collectionSummary = getCollectionSummary(true)
 
 		for _, k := range gjson.Get(collectionSummary, "items").Array() {
-			printReleaseName(gjson.Get(k.Raw, "album_title").String(),
-				gjson.Get(k.Raw, "band_name").String())
+			if !preDownloadCheck(gjson.Get(k.Raw, "item_title").String(),
+				gjson.Get(k.Raw, "band_name").String()){
+					continue
+				}
 
 			redownloadMap := organizeRedownloadURLS(collectionSummary)
 
@@ -658,7 +692,6 @@ func availAndDownload(releaseLink string) {
 func get(releaseLink string) {
 	color.New(color.FgGreen).Print(string("==> "))
 	fmt.Println(releaseLink)
-
 	releaseLink = strings.TrimSpace(releaseLink)
 	u, _ := url.Parse(releaseLink)
 	releaseLink = string(u.String())
@@ -711,7 +744,8 @@ var (
 	noBar             bool
 	keepZip           bool
 	overwrite         bool
-	o                 bool
+	o                 string
+	skip              int
 )
 
 func main() {
@@ -747,10 +781,11 @@ func main() {
 	monFlag := kingpin.Flag("monitor", "If existing release is found in this folder, it will be moved to the downloads folder").Default("downloads").Short('m').String()
 	wdFlag := kingpin.Flag("description", "Download and write description to info.txt").Short('d').Bool()
 	nbFlag := kingpin.Flag("nobar", "Turns off progress bar").Short('p').Bool()
-	ovrFlag := kingpin.Flag("overwrite", "Does not ask if you want to overwrite a download").Short('f').Bool()
 	logoFlag := kingpin.Flag("nologo", "Disables logo").Short('n').Bool()
+	skipFlag := kingpin.Flag("skip", "Skip the first N downloads unconditionally").Short('s').PlaceHolder("N").Int()
+	ovrFlag := kingpin.Flag("overwrite", "when to overwrite a download (always, ask, never)").PlaceHolder("WHEN").Default("ask").Enum("always", "ask", "never")
+	
 	kingpin.Parse()
-
 	// Assign flags to variables
 	releaseLinks := *rlArg
 	keepZip = *zFlag
@@ -761,6 +796,7 @@ func main() {
 	noBar = *nbFlag
 	o = *ovrFlag
 	logo := *logoFlag
+	skip = *skipFlag
 
 	if !logo {
 		printLogo()
